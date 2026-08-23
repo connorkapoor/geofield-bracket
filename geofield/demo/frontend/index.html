@@ -353,7 +353,7 @@ addEventListener('pointerup',()=>{
 window.toggleLive=()=>{liveOn=!liveOn; $('btnLive').classList.toggle('on',liveOn);
   if(liveOn) schedule(true);};
 function schedule(settle){
-  if(!liveOn) return;
+  if(!liveOn || tourOn) return;   // the tour owns the regeneration loop
   clearTimeout(timer);
   timer=setTimeout(()=>design({fast:!settle}), settle?100:340);
 }
@@ -379,14 +379,17 @@ function showSizing(c){
     `to the ${s.tf_floor_mm} mm beam-theory floor`);
   $('sizeNote').innerHTML=notes.length?`<div class="note">${notes.join('<br>')}</div>`:'';
 }
-async function design({fast=true}={}){
+async function design({fast=true, seed=null}={}){
   if(inflight) inflight.abort();
   const ctl=new AbortController(); inflight=ctl;
   try{
     say(fast?'designing…':'sizing + ranking…');
     await tokens();
     const g=await(await api('/generate',{tokens:curTokens,n:1,
-      seed:Math.floor(Math.random()*1e6),mode:'designer',rank:!fast},ctl.signal)).json();
+      // a pinned seed makes consecutive designs comparable: the part then
+      // evolves with the requirement instead of jittering on MC-dropout
+      seed:seed!=null?seed:Math.floor(Math.random()*1e6),
+      mode:'designer',rank:!fast},ctl.signal)).json();
     if(!g.candidates.length){say('no bracket fits — grow the envelope or move the load'); return;}
     const c=g.candidates[0]; curId=c.latent_id;
     showSizing(c);
@@ -508,34 +511,49 @@ window.snap=()=>{renderer.render(scene,camera);
   a.download='geofield.png'; a.click();};
 
 // ------------------------------------------------- demo tour (screen-record)
-// Choreographed parameter sweep: every act tweens the request and the design
-// is regenerated continuously, so a recording shows the model responding
-// rather than a slideshow of stills.
+// Choreographed parameter sweep for recording a loop.
+//
+// A design round-trip is 0.4-7 s depending on what else the machine is doing,
+// so the tween CANNOT run on a wall clock alone — that is what made the first
+// version look broken (60 fps of tween against a 620 ms regeneration throttle:
+// every request aborted by its successor, the part frozen while the numbers
+// raced). Instead an act's progress is
+//
+//     min(elapsed / act.t, designs_completed / PER_ACT)
+//
+// so it is paced by whichever is slower. A fast backend is capped by act.t and
+// stays readable; a slow one drags the guides down to its own rate and the
+// motion stays matched to the geometry. The part still lags the guides by about
+// one design, which reads correctly on a recording: the requirement moves, then
+// the bracket answers it.
 const ACTS = [
-  {t:5200, cap:'Load grows 150 N → 3000 N — a gusset appears and deepens',
+  {t:14000, cap:'Load grows 150 N → 3000 N — a gusset appears and deepens',
    to:{N:3000}, from:{N:150}},
-  {t:3800, cap:'Load walks back toward the wall — the shelf shortens, the brace shrinks',
+  {t:11000, cap:'Load walks back toward the wall — the shelf shortens, the brace shrinks',
    to:{fy:0.32}},
-  {t:3800, cap:'…and out to the tip again — the brace grows back',
+  {t:11000, cap:'…and out to the tip again — the brace grows back',
    to:{fy:0.95}},
-  {t:4200, cap:'Load slides down the envelope — the whole bracket flips to meet it',
+  {t:12000, cap:'Load slides down the envelope — the whole bracket flips to meet it',
    to:{fz:0.16}},
-  {t:3400, cap:'…and back up', to:{fz:0.88}},
-  {t:4600, cap:'Aiming the force sideways — twin offset ribs replace the centred gusset',
+  {t:10000, cap:'…and back up', to:{fz:0.88}},
+  {t:13000, cap:'Aiming the force sideways — offset ribs replace the centred gusset',
    to:{dx:0.78, dz:-0.62}},
-  {t:3600, cap:'Pull-out direction — wall plate sized for bolt prying, more bolts',
+  {t:11000, cap:'Pull-out direction — wall plate sized for bolt prying, more bolts',
    to:{dx:0, dy:0.9, dz:-0.42}},
-  {t:3000, cap:'Back to a shelf load', to:{dx:0, dy:0, dz:-1}},
-  {t:4200, cap:'Envelope reach 160 → 300 mm — one dimension at a time',
+  {t:9000,  cap:'Back to a shelf load', to:{dx:0, dy:0, dz:-1}},
+  {t:12000, cap:'Envelope reach 160 → 300 mm — one dimension at a time',
    to:{ed:300}},
-  {t:3600, cap:'Envelope height 200 → 320 mm', to:{eh:320}},
-  {t:3400, cap:'Envelope width 60 → 75 mm', to:{ew:75}},
-  {t:3200, cap:'Aluminium → steel: the same duty needs less section',
+  {t:11000, cap:'Envelope height 200 → 320 mm', to:{eh:320}},
+  {t:10000, cap:'Envelope width 60 → 75 mm', to:{ew:75}},
+  {t:10000, cap:'Aluminium → steel: the same duty needs less section',
    to:{mat:'Steel1018'}},
-  {t:4000, cap:'Back to the start', to:{N:400, fy:0.85, fz:0.85, ed:160, eh:200,
-                                        ew:60, mat:'Al6061'}},
+  {t:12000, cap:'Back to the start', to:{N:400, fy:0.85, fz:0.85, ed:160, eh:200,
+                                         ew:60, mat:'Al6061'}},
 ];
-let tourOn=false, tourAct=0, tourT0=0, tourFrom=null, lastTourDesign=0;
+const TOUR_SEED = 11;          // pinned: the part changes with the requirement only
+const PER_ACT = 6;             // designs an act must land before it may advance
+let tourOn=false, tourAct=0, tourT0=0, tourFrom=null, lastGuideDraw=0,
+    holdFull=false, actDesigns=0, tourShown=0;
 const easeIO = x => x<0.5 ? 2*x*x : 1-Math.pow(-2*x+2,2)/2;
 const snapshotState = () => ({N:+$('ln').value, ew:+$('ew').value, ed:+$('ed').value,
   eh:+$('eh').value, fy:loadFrac.y, fz:loadFrac.z,
@@ -548,17 +566,22 @@ window.toggleTour=()=>{
   $('caption').style.display = tourOn ? 'block' : 'none';
   controls.autoRotate = tourOn; controls.autoRotateSpeed = 0.45;
   if(tourOn){ tourAct=0; tourT0=performance.now(); tourFrom=snapshotState();
-    if(!liveOn) toggleLive(); }
-  else say('tour stopped');
+    holdFull=false; actDesigns=0; tourShown=0; tourWorker(); }
+  else { if(inflight) inflight.abort(); say('tour stopped'); }
 };
 
+// guides, every frame (throttled to ~25 fps; drawGuides rebuilds its geometry,
+// so there is no point running it at display rate)
 function tourStep(now){
-  if(!tourOn) return;
   const act=ACTS[tourAct % ACTS.length];
-  const raw=Math.min(1,(now-tourT0)/act.t), k=easeIO(raw);
+  // paced by the slower of the wall clock and the regeneration rate, then
+  // smoothed so the guides glide between design completions instead of
+  // stepping when the backend is the limiting factor
+  const raw=Math.min(1,(now-tourT0)/act.t, actDesigns/PER_ACT);
+  tourShown += (raw-tourShown)*0.06;
+  const k=easeIO(tourShown);
   const from=Object.assign({}, tourFrom, act.from||{});
-  const to=act.to;
-  const lerp=(a,b)=>a+(b-a)*k;
+  const to=act.to, lerp=(a,b)=>a+(b-a)*k;
   if('N' in to)  $('ln').value = Math.round(lerp(from.N,to.N));
   if('ew' in to) $('ew').value = Math.round(lerp(from.ew,to.ew));
   if('ed' in to) $('ed').value = Math.round(lerp(from.ed,to.ed));
@@ -571,13 +594,32 @@ function tourStep(now){
             lerp(from.dz,'dz' in to?to.dz:from.dz)).normalize();
   }
   if('mat' in to && raw>0.5) $('mat').value = to.mat;
-  $('caption').innerHTML = `<b>${tourAct % ACTS.length + 1}/${ACTS.length}</b> &nbsp; ${act.cap}`;
-  drawGuides();
-  if(now-lastTourDesign > 620){ lastTourDesign=now; design({fast:true}); }
-  if(raw>=1){ tourAct++; tourT0=now; tourFrom=snapshotState();
-    design({fast:false}); }
+  $('caption').innerHTML =
+    `<b>${tourAct % ACTS.length + 1}/${ACTS.length}</b> &nbsp; ${act.cap}`;
+  if(now-lastGuideDraw > 40){ lastGuideDraw=now; drawGuides(); }
+  // wait for the smoothed value to arrive too, or the act would flip while the
+  // guides are still easing into their end pose
+  if(raw>=1 && tourShown>0.995){
+    tourAct++; tourT0=now; tourFrom=snapshotState();
+    actDesigns=0; tourShown=0; holdFull=true;
+  }
 }
-(function tourLoop(){ requestAnimationFrame(tourLoop); if(tourOn) tourStep(performance.now()); })();
+(function tourLoop(){ requestAnimationFrame(tourLoop);
+  if(tourOn) tourStep(performance.now()); })();
+
+// the part, regenerated as fast as the backend actually manages. Awaiting each
+// design means no aborted requests and no dropped frames of geometry; each
+// completion is also the tick that lets the guides advance.
+async function tourWorker(){
+  while(tourOn){
+    const full = holdFull; holdFull = false;
+    try{ await design({fast:!full, seed:TOUR_SEED}); }
+    catch(e){ /* keep the loop alive; design() reports its own errors */ }
+    if(!tourOn) break;
+    actDesigns++;
+    await new Promise(r=>setTimeout(r,120));   // yield to the renderer
+  }
+}
 
 design({fast:false});
 </script>
