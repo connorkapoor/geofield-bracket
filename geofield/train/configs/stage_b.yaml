@@ -1,0 +1,30 @@
+# Stage B (L-bracket dataset): co-train all labeled heads
+model: geofield
+data: data/l1
+out_dir: runs/stage_b_l1
+init_from: runs/stage_a_l1/ckpt_final.pt
+steps: 8000
+lr: 1.0e-4
+warmup: 1000
+seed: 0
+dim: 256
+n_layers: 5
+m_fine: 384
+m_coarse: 32
+k_input: 32
+n_input: 1536
+n_query: 3072
+n_geom: 0
+n_labeled: 6
+grad_accum: 2
+p_mask: 0.5
+use_field_heads: true
+se3_augment: false
+bf16: true
+compile: true
+ckpt_every: 1000
+workers: 2
+cache_shards: 64
+log_every: 25
+
+

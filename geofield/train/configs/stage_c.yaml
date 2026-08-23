@@ -1,0 +1,16 @@
+# Stage C: conditional flow matching over encoded latents
+latents: data/l1_latents
+out_dir: runs/stage_c
+steps: 10000
+lr: 1.0e-4
+warmup: 2000
+batch: 64
+flow_dim: 384
+flow_layers: 8
+flow_k: 32
+p_drop: 0.15
+seed: 0
+bf16: true
+ckpt_every: 2000
+
+

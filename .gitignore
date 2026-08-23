@@ -1,0 +1,37 @@
+# environments
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# secrets / keys — never commit
+*.pem
+*.key
+id_*
+.ssh/
+
+# generated data & runs (regenerate with `make data`; see README)
+data/
+runs/
+results/
+logs/
+*.npz
+*.stl
+
+# large checkpoints (models/designer.pt IS committed — it is 324 KB)
+*.pt
+!models/designer.pt
+
+# live dashboard artifacts
+status.html
+status.json
+progress.png
+tools/watchdog_state.json
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+.claude/

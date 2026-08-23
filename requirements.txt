@@ -1,0 +1,17 @@
+# Core (CPU works; CUDA strongly recommended for dataset generation/training)
+# For CUDA wheels:  pip install torch --index-url https://download.pytorch.org/whl/cu124
+torch>=2.4
+numpy>=1.26
+scipy>=1.11
+pyamg>=5.2          # algebraic multigrid — thin-plate FEA needs it
+scikit-image>=0.22  # marching cubes
+pyyaml>=6.0
+matplotlib>=3.8
+pillow>=10.0
+pytest>=8.0
+
+# demo server
+fastapi>=0.110
+uvicorn>=0.29
+pydantic>=2.6
+requests>=2.31

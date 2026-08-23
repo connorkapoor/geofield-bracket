@@ -1,0 +1,26 @@
+# Baseline (L-bracket dataset): non-equivariant control on the Spark GB10
+model: baseline
+data: data/l1
+out_dir: runs/baseline_l1
+steps: 6000
+lr: 3.0e-4
+warmup: 1500
+seed: 0
+dim: 256
+n_layers: 5
+m_fine: 384
+m_coarse: 32
+n_input: 1536
+n_query: 3072
+n_geom: 0
+n_labeled: 8
+grad_accum: 2
+p_mask: 0.7
+use_field_heads: false
+se3_augment: true
+bf16: true
+compile: false
+ckpt_every: 1000
+log_every: 25
+workers: 2
+cache_shards: 64

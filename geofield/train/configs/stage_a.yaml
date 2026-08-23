@@ -1,0 +1,28 @@
+# Stage A (L-bracket dataset): geometry pretraining on the Spark
+model: geofield
+data: data/l1
+out_dir: runs/stage_a_l1
+steps: 6000
+lr: 3.0e-4
+warmup: 1500
+seed: 0
+dim: 256
+n_layers: 5
+m_fine: 384
+m_coarse: 32
+k_input: 32
+n_input: 1536
+n_query: 4096
+n_geom: 0
+n_labeled: 8
+grad_accum: 2
+p_mask: 0.7
+use_field_heads: false
+se3_augment: false
+bf16: true
+compile: true
+ckpt_every: 1000
+workers: 2
+cache_shards: 64
+log_every: 25
+
