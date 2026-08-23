@@ -1,125 +1,185 @@
 <!doctype html>
-<html>
+<html lang="en">
 <head>
 <meta charset="utf-8">
-<title>GeoField — design a bracket</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GeoField · bracket designer</title>
 <style>
-  :root { color-scheme: dark; }
-  body { margin:0; background:#0e0f13; color:#d6dae2; font-family:system-ui;
-         display:flex; height:100vh; overflow:hidden; }
-  #panel { width:345px; padding:16px; background:#171a21; overflow-y:auto; flex-shrink:0; }
-  #view { flex:1; position:relative; cursor:grab; }
-  #view.dragging { cursor:grabbing; }
-  h1 { font-size:17px; color:#fff; margin:0 0 4px; }
-  .sub { font-size:12px; color:#7d8697; margin-bottom:12px; line-height:1.45; }
-  h2 { font-size:12px; color:#8fb8ff; margin:18px 0 8px; text-transform:uppercase; letter-spacing:.05em; }
-  button { background:#3987e5; color:#fff; border:0; border-radius:6px;
-           padding:9px 13px; margin:3px 2px; cursor:pointer; font-size:13px; }
-  button.big { width:100%; padding:12px; font-size:15px; font-weight:600; }
-  button.secondary { background:#2a2f3a; }
-  button.chip { background:#20252f; padding:5px 9px; font-size:11px; }
-  button.chip.on { background:#3987e5; }
-  button:disabled { opacity:.4; cursor:wait; }
-  select, input { background:#0e0f13; color:#d6dae2; border:1px solid #2a2f3a;
-           border-radius:6px; padding:6px; font-size:13px; box-sizing:border-box; }
-  .row { display:flex; gap:6px; align-items:center; margin:5px 0; }
-  .row label { font-size:12px; color:#7d8697; width:104px; flex-shrink:0; }
-  .row input[type=number] { width:68px; }
-  .row input[type=range] { flex:1; }
-  #status { font-size:12px; color:#c98500; min-height:34px; margin-top:10px;
-            font-family:ui-monospace,monospace; white-space:pre-wrap; line-height:1.5; }
-  .cand { background:#20252f; border-radius:6px; padding:8px 10px; margin:5px 0;
-          font-size:12px; cursor:pointer; font-family:ui-monospace,monospace; line-height:1.5; }
-  .cand:hover { outline:1px solid #4a5162; }
-  .cand.sel { outline:2px solid #3987e5; }
-  .cand b { color:#fff; font-weight:600; }
-  #legend { position:absolute; bottom:14px; left:14px; background:#171a21e6;
-            padding:9px 13px; border-radius:8px; font-size:11px; display:none; }
-  #legend .bar { width:170px; height:10px; border-radius:4px; margin:5px 0;
-    background:linear-gradient(90deg,#440154,#31688e,#35b779,#fde725); }
-  #legend .lab { display:flex; justify-content:space-between; color:#7d8697; }
-  .badge { display:inline-block; border-radius:5px; padding:3px 9px; font-weight:600; font-size:13px; }
-  .pass { background:#0a4d0a; color:#9fdc9f; } .fail { background:#5c1414; color:#f0a0a0; }
-  .warn { background:#4d3a0a; color:#f2d08a; }
-  #hint { position:absolute; top:14px; left:14px; background:#171a21e6; padding:9px 13px;
-          border-radius:8px; font-size:11px; color:#9aa4b5; max-width:340px; line-height:1.6; }
-  #tools { position:absolute; top:14px; right:14px; display:flex; flex-direction:column; gap:4px; }
-  #readout { position:absolute; bottom:14px; right:14px; background:#171a21e6;
-             padding:8px 12px; border-radius:8px; font-size:11px;
-             font-family:ui-monospace,monospace; color:#9aa4b5; display:none; }
+  :root{
+    --bg:#f4f4f2; --surface:#ffffff; --line:#dcdcd7; --line2:#ebebe7;
+    --ink:#15171a; --ink2:#4a4d52; --muted:#8a8f97;
+    --accent:#15171a;            /* CTA = charcoal, industrial */
+    --force:#d8462a;             /* load / force */
+    --steel:#b6bcc4;             /* the part */
+    --ok:#1b7f4b; --bad:#b02a1e; --warn:#a86a12;
+    --r:6px;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{margin:0;display:flex;background:var(--bg);color:var(--ink);
+    font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Inter,system-ui,sans-serif;
+    -webkit-font-smoothing:antialiased;overflow:hidden}
+  #panel{width:308px;flex:none;background:var(--surface);border-right:1px solid var(--line);
+    display:flex;flex-direction:column;overflow-y:auto}
+  #view{flex:1;position:relative;cursor:grab}
+  #view.dragging{cursor:grabbing}
+
+  .brand{padding:20px 22px 16px;border-bottom:1px solid var(--line2)}
+  .brand h1{margin:0;font-size:15px;letter-spacing:.16em;text-transform:uppercase;font-weight:700}
+  .brand p{margin:6px 0 0;font-size:11.5px;color:var(--muted);line-height:1.5}
+
+  .sec{padding:16px 22px;border-bottom:1px solid var(--line2)}
+  .sec h2{margin:0 0 12px;font-size:9.5px;letter-spacing:.18em;text-transform:uppercase;
+    color:var(--muted);font-weight:700}
+
+  .kv{display:flex;justify-content:space-between;align-items:baseline;padding:4px 0;
+    font-variant-numeric:tabular-nums}
+  .kv span:first-child{font-size:11.5px;color:var(--ink2)}
+  .kv span:last-child{font-size:13px;font-weight:600}
+  .kv.dim span:last-child{color:var(--muted);font-weight:500}
+
+  .field{display:flex;align-items:center;gap:8px;margin:7px 0}
+  .field label{font-size:11.5px;color:var(--ink2);width:74px;flex:none}
+  input[type=number],select{flex:1;min-width:0;background:var(--surface);color:var(--ink);
+    border:1px solid var(--line);border-radius:var(--r);padding:7px 9px;font-size:13px;
+    font-variant-numeric:tabular-nums;font-family:inherit}
+  input:focus,select:focus{outline:none;border-color:var(--ink);}
+
+  button{font-family:inherit;font-size:12.5px;border-radius:var(--r);cursor:pointer;
+    border:1px solid var(--line);background:var(--surface);color:var(--ink);padding:9px 12px;
+    transition:background .12s,border-color .12s}
+  button:hover{border-color:var(--ink2)}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+  button.primary:hover{background:#000}
+  button.on{background:var(--ink);border-color:var(--ink);color:#fff}
+  button.wide{width:100%}
+  .btnrow{display:flex;gap:6px;flex-wrap:wrap}
+  .btnrow button{flex:1;white-space:nowrap}
+
+  .note{font-size:11px;color:var(--ink2);background:#faf9f6;border:1px solid var(--line2);
+    border-left:2px solid var(--warn);border-radius:4px;padding:7px 9px;margin-top:8px;line-height:1.5}
+  .cand{border:1px solid var(--line);border-radius:var(--r);padding:9px 11px;margin:6px 0;
+    cursor:pointer;font-size:11.5px;line-height:1.55;font-variant-numeric:tabular-nums}
+  .cand:hover{border-color:var(--ink2)}
+  .cand.sel{border-color:var(--ink);box-shadow:inset 0 0 0 1px var(--ink)}
+  .cand b{font-size:12.5px;text-transform:capitalize}
+  .badge{display:inline-block;border-radius:4px;padding:3px 8px;font-size:11px;font-weight:700;
+    letter-spacing:.06em;text-transform:uppercase}
+  .badge.pass{background:#e7f3ec;color:var(--ok)} .badge.fail{background:#fbeae8;color:var(--bad)}
+  .bar{height:5px;background:var(--line2);border-radius:3px;overflow:hidden;margin:7px 0 3px}
+  .bar i{display:block;height:100%;background:var(--ok)}
+  .bar.hot i{background:var(--warn)} .bar.over i{background:var(--bad)}
+
+  #status{padding:14px 22px;font-size:11px;color:var(--muted);min-height:46px;line-height:1.55;
+    border-top:1px solid var(--line2);margin-top:auto;background:#fbfbf9}
+  .hint{position:absolute;top:16px;left:16px;background:#ffffffdd;backdrop-filter:blur(6px);
+    border:1px solid var(--line);border-radius:var(--r);padding:10px 13px;font-size:11px;
+    color:var(--ink2);line-height:1.7;max-width:290px}
+  .hint b{color:var(--ink)}
+  .dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:5px;vertical-align:1px}
+  #legend{position:absolute;bottom:16px;left:16px;background:#ffffffdd;backdrop-filter:blur(6px);
+    border:1px solid var(--line);border-radius:var(--r);padding:10px 13px;font-size:11px;display:none}
+  #legend .ramp{width:168px;height:8px;border-radius:4px;margin:6px 0;
+    background:linear-gradient(90deg,#2c3e70,#3d7bfd,#41d6a6,#f2d08a,#d8462a)}
+  #legend .ends{display:flex;justify-content:space-between;color:var(--muted);
+    font-variant-numeric:tabular-nums}
+  #readout{position:absolute;bottom:16px;right:16px;background:#ffffffdd;border:1px solid var(--line);
+    border-radius:var(--r);padding:8px 12px;font-size:11px;font-variant-numeric:tabular-nums;
+    color:var(--ink2);display:none}
+  #dims{position:absolute;top:16px;right:16px;background:#ffffffdd;border:1px solid var(--line);
+    border-radius:var(--r);padding:10px 13px;font-size:11px;font-variant-numeric:tabular-nums;
+    color:var(--ink2);line-height:1.7;text-align:right}
+  #dims b{color:var(--ink);font-size:12px}
 </style>
 </head>
 <body>
-<div id="panel">
-  <h1>Design a bracket</h1>
-  <div class="sub">Set the space it must fit and the load it must carry.
-    A learned agent designs it, the geometric model predicts its stress,
-    the solver certifies it.</div>
-
-  <div class="row" style="margin-bottom:10px">
-    <button class="chip on" id="btnLive" onclick="toggleLive()" style="flex:1">● live updates</button>
-    <button class="chip" onclick="generate(true)" style="flex:1">alternatives</button>
+<aside id="panel">
+  <div class="brand">
+    <h1>GeoField</h1>
+    <p>Bracket designer — set the load, the geometry follows. Sized by beam
+       theory, ranked by a learned surrogate, certified by FEA.</p>
   </div>
 
-  <h2>1 · Space available (mm) <span style="color:#7d8697;text-transform:none;font-weight:400">— drag the yellow handles</span></h2>
-  <div class="row"><label>width (x)</label><input id="ew" type="number" value="60">
-    <label style="width:auto">reach (y)</label><input id="ed" type="number" value="160"></div>
-  <div class="row"><label>height (z)</label><input id="eh" type="number" value="200"></div>
-
-  <h2>2 · The load <span style="color:#7d8697;text-transform:none;font-weight:400">— drag the ball to move, the cone to aim</span></h2>
-  <div class="row"><label>reach out</label><input id="lpy" type="range" min="25" max="98" value="80"><span id="lpyv" style="font-size:11px;width:32px">80%</span></div>
-  <div class="row"><label>height</label><input id="lpz" type="range" min="8" max="95" value="85"><span id="lpzv" style="font-size:11px;width:32px">85%</span></div>
-  <div class="row"><label>direction</label>
-    <select id="ldir" style="flex:1">
-      <option value="0,0,-1" selected>straight down (shelf)</option>
-      <option value="0,1,-0.3">outward pull</option>
-      <option value="0,-0.5,-1">down + toward wall</option>
-      <option value="1,0,-0.5">sideways + down</option>
-      <option value="custom">custom (dragged)</option>
-    </select></div>
-  <div class="row"><label style="width:auto">aimed</label>
-    <span id="dirReadout" style="font-size:11px;font-family:ui-monospace,monospace;color:#9aa4b5">0, 0, −1</span></div>
-  <div class="row"><label>force (N)</label><input id="ln" type="number" value="400">
-    <label style="width:auto">mat'l</label>
-    <select id="mat"><option>Al6061</option><option>Steel1018</option></select></div>
-
-  <h2>3 · Generate</h2>
-  <div class="row"><label>alternatives</label><input id="genN" type="number" value="4" min="1" max="6">
-    <button style="flex:1" onclick="generate(true)">Show N</button></div>
-  <div id="cands"></div>
-
-  <h2>4 · Inspect</h2>
-  <div class="row"><label>colour by</label>
-    <select id="fieldSel" onchange="paint()" style="flex:1">
-      <option value="">plain metal</option>
-      <option value="von_mises">predicted stress</option>
-      <option value="tool_access">machinability</option>
-      <option value="thickness">wall thickness</option>
-    </select></div>
-  <div class="row"><label>cut away</label><input id="clip" type="range" min="0" max="100" value="100"></div>
-  <div class="row" style="flex-wrap:wrap">
-    <button class="chip" id="btnWire" onclick="toggleWire()">wireframe</button>
-    <button class="chip" id="btnEnv" onclick="toggleEnv()">envelope</button>
-    <button class="chip" onclick="resetView()">reset view</button>
-    <button class="chip" onclick="snap()">snapshot</button>
+  <div class="sec">
+    <h2>Load case</h2>
+    <div class="field"><label>Force</label>
+      <input id="ln" type="number" value="500" step="50"><span style="font-size:11px;color:var(--muted)">N</span></div>
+    <div class="field"><label>Material</label>
+      <select id="mat"><option>Al6061</option><option>Steel1018</option></select></div>
+    <div class="kv dim"><span>Moment arm</span><span id="roArm">—</span></div>
+    <div class="kv dim"><span>Direction</span><span id="roDir">—</span></div>
   </div>
 
-  <h2>5 · Certify &amp; export</h2>
-  <div class="row"><label>stress limit</label><input id="sigMax" type="number" value="276">
-    <span style="font-size:11px;color:#7d8697">MPa</span></div>
-  <button onclick="verify()">Verify with FEA</button>
-  <button class="secondary" onclick="exportStl()">Download STL</button>
-  <div id="verdict"></div>
-  <div id="status">set the box and load, then press Design</div>
-</div>
+  <div class="sec">
+    <h2>Envelope</h2>
+    <div class="field"><label>Width X</label><input id="ew" type="number" value="60" step="5"></div>
+    <div class="field"><label>Reach Y</label><input id="ed" type="number" value="160" step="10"></div>
+    <div class="field"><label>Height Z</label><input id="eh" type="number" value="200" step="10"></div>
+  </div>
+
+  <div class="sec">
+    <h2>Design</h2>
+    <div class="kv"><span>Style</span><span id="roStyle">—</span></div>
+    <div class="kv"><span>Plates (wall / shelf)</span><span id="roPlates">—</span></div>
+    <div class="kv"><span>Bolts</span><span id="roBolts">—</span></div>
+    <div class="kv dim"><span>Mass</span><span id="roMass">—</span></div>
+    <div class="kv"><span>Beam utilisation</span><span id="roUtil">—</span></div>
+    <div class="bar" id="utilBar"><i style="width:0%"></i></div>
+    <div id="sizeNote"></div>
+  </div>
+
+  <div class="sec">
+    <h2>Alternatives</h2>
+    <div class="btnrow">
+      <button id="btnLive" class="on" onclick="toggleLive()">live</button>
+      <button onclick="generate()">show 4</button>
+    </div>
+    <div id="cands"></div>
+  </div>
+
+  <div class="sec">
+    <h2>Certify</h2>
+    <div class="field"><label>Limit</label>
+      <input id="sigMax" type="number" value="276" step="10"><span style="font-size:11px;color:var(--muted)">MPa</span></div>
+    <button class="primary wide" onclick="verify()">Verify with FEA</button>
+    <div id="verdict" style="margin-top:9px"></div>
+    <div class="btnrow" style="margin-top:9px">
+      <button onclick="exportStl()">STL</button>
+      <button onclick="snap()">PNG</button>
+    </div>
+  </div>
+
+  <div class="sec">
+    <h2>View</h2>
+    <div class="field"><label>Colour</label>
+      <select id="fieldSel" onchange="paint()">
+        <option value="">plain</option>
+        <option value="von_mises">predicted stress</option>
+        <option value="tool_access">machinability</option>
+        <option value="thickness">wall thickness</option>
+      </select></div>
+    <div class="field"><label>Section</label><input id="clip" type="range" min="0" max="100" value="100"></div>
+    <div class="btnrow">
+      <button onclick="toggleWire()" id="btnWire">mesh</button>
+      <button onclick="toggleEnv()" id="btnEnv" class="on">guides</button>
+      <button onclick="resetView()">home</button>
+    </div>
+  </div>
+
+  <div id="status">Drag the handles in the viewport.</div>
+</aside>
 
 <div id="view"></div>
-<div id="hint">Yellow box = allowed space · grey plane = the wall ·
-  <b style="color:#e66767">red arrow = your load (drag it)</b><br>
-  drag empty space to orbit · scroll to zoom · hover the part for live values</div>
-<div id="tools"></div>
-<div id="legend"><div id="legendName"></div><div class="bar"></div>
-  <div class="lab"><span id="legMin"></span><span id="legMax"></span></div></div>
+<div class="hint">
+  <span class="dot" style="background:var(--force)"></span><b>Red ball</b> — move the load ·
+  <b>cone</b> — aim it<br>
+  <span class="dot" style="background:#c9a227"></span><b>Yellow tabs</b> — one envelope
+  dimension each<br>
+  <span class="dot" style="background:var(--steel)"></span>drag empty space to orbit · scroll to zoom
+</div>
+<div id="dims"></div>
+<div id="legend"><div id="legendName"></div><div class="ramp"></div>
+  <div class="ends"><span id="legMin"></span><span id="legMax"></span></div></div>
 <div id="readout"></div>
 
 <script type="importmap">
@@ -131,325 +191,312 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
+// ---- scene: 1 unit = SCENE_MM millimetres (FIXED), so dragging one envelope
+// ---- dimension changes only that dimension on screen.
+const SCENE_MM = 300;
+const mm = v => v / SCENE_MM;
+
 const view = document.getElementById('view');
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x0e0f13);
-const camera = new THREE.PerspectiveCamera(45, 1, 0.01, 50);
-const HOME = new THREE.Vector3(1.9, -1.8, 1.15);
+scene.background = new THREE.Color(0xf4f4f2);
+const camera = new THREE.PerspectiveCamera(42, 1, 0.01, 60);
+const HOME = new THREE.Vector3(1.15, -1.25, 0.78);
 camera.position.copy(HOME); camera.up.set(0, 0, 1);
-const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+const renderer = new THREE.WebGLRenderer({antialias:true, preserveDrawingBuffer:true});
 renderer.localClippingEnabled = true;
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 view.appendChild(renderer.domElement);
 const controls = new OrbitControls(camera, renderer.domElement);
-controls.enableDamping = true; controls.dampingFactor = 0.08;
-scene.add(new THREE.AmbientLight(0xffffff, 0.42));
-const key = new THREE.DirectionalLight(0xffffff, 1.25); key.position.set(2,-1.4,3); scene.add(key);
-const rim = new THREE.DirectionalLight(0x88aaff, 0.55); rim.position.set(-2,2,-1); scene.add(rim);
-const fill = new THREE.DirectionalLight(0xffffff, 0.3); fill.position.set(0,-3,-1); scene.add(fill);
+controls.enableDamping = true; controls.dampingFactor = 0.09;
 
-function resize(){ const w=view.clientWidth,h=view.clientHeight;
-  camera.aspect=w/h; camera.updateProjectionMatrix(); renderer.setSize(w,h); }
-window.addEventListener('resize', resize); resize();
-(function loop(){ requestAnimationFrame(loop); controls.update(); renderer.render(scene,camera); })();
+scene.add(new THREE.HemisphereLight(0xffffff, 0xb9b9b2, 0.85));
+const key = new THREE.DirectionalLight(0xffffff, 1.15); key.position.set(1.4,-1.2,2.2);
+scene.add(key);
+const side = new THREE.DirectionalLight(0xffffff, 0.45); side.position.set(-2,1.2,0.6);
+scene.add(side);
+
+function resize(){const w=view.clientWidth,h=view.clientHeight;
+  camera.aspect=w/h; camera.updateProjectionMatrix(); renderer.setSize(w,h);}
+addEventListener('resize', resize); resize();
+(function loop(){requestAnimationFrame(loop); controls.update(); renderer.render(scene,camera);})();
 
 // ---------------------------------------------------------------- state
-let envBox=null, wallPlane=null, loadArrow=null, loadHandle=null, aimHandle=null;
-let envHandles=[], meshObj=null, meshVerts=null;
-let currentId=null, currentTokens=null;
-let halfNorm=[0.2,0.5,0.6], showEnv=true, wire=false, lastPaint='';
-let liveOn=true, customDir=new THREE.Vector3(0,0,-1);
-let designTimer=null, inflight=null, busy=false;
-const clipPlane=new THREE.Plane(new THREE.Vector3(0,-1,0),10);
-const S=document.getElementById('status'), say=m=>S.textContent=m;
-const $=id=>document.getElementById(id);
-const api=async(p,b,signal)=>{const r=await fetch(p,{method:'POST',signal,
-  headers:{'Content-Type':'application/json'},body:JSON.stringify(b)});
-  if(!r.ok) throw new Error(`${p} ${r.status}: ${(await r.text()).slice(0,140)}`); return r;};
-
-function cmap(t){const s=[[0.267,0.005,0.329],[0.191,0.407,0.556],[0.208,0.718,0.473],[0.993,0.906,0.144]];
-  const x=Math.max(0,Math.min(0.9999,t))*(s.length-1),i=Math.floor(x),f=x-i;
-  return [s[i][0]+(s[i+1][0]-s[i][0])*f,s[i][1]+(s[i+1][1]-s[i][1])*f,s[i][2]+(s[i+1][2]-s[i][2])*f];}
-
-function unitMm(){const w=+$('ew').value,d=+$('ed').value,h=+$('eh').value;
-  return Math.sqrt(w*w+d*d+h*h)/(2*0.85);}
-function loadPointNorm(){return new THREE.Vector3(0,
-  ($('lpy').value/100-0.5)*2*halfNorm[1], ($('lpz').value/100-0.5)*2*halfNorm[2]);}
-function loadDir(){
-  if($('ldir').value==='custom') return customDir.clone().normalize();
-  return new THREE.Vector3(...$('ldir').value.split(',').map(Number)).normalize();
+let envBox=null, wallGrid=null, arrow=null, ball=null, cone=null, tabs=[];
+let part=null, partVerts=null, unitMm=1, curId=null, curTokens=null;
+let showGuides=true, wire=false, liveOn=true, painted='';
+let loadFrac={y:0.80, z:0.85}, dir=new THREE.Vector3(0,0,-1);
+let timer=null, inflight=null;
+const clip = new THREE.Plane(new THREE.Vector3(0,-1,0), 10);
+const $ = id => document.getElementById(id);
+const say = m => $('status').textContent = m;
+const api = async (p,b,signal) => {
+  const r = await fetch(p,{method:'POST',signal,headers:{'Content-Type':'application/json'},
+    body:JSON.stringify(b)});
+  if(!r.ok) throw new Error(`${p} ${r.status}: ${(await r.text()).slice(0,120)}`);
+  return r;
+};
+const env = () => ({w:+$('ew').value, d:+$('ed').value, h:+$('eh').value});
+function ramp(t){ // cool->warm technical ramp, matches the legend
+  const s=[[0.17,0.24,0.44],[0.24,0.48,0.99],[0.25,0.84,0.65],[0.95,0.82,0.54],[0.85,0.27,0.16]];
+  const x=Math.max(0,Math.min(0.9999,t))*(s.length-1), i=Math.floor(x), f=x-i;
+  return [s[i][0]+(s[i+1][0]-s[i][0])*f, s[i][1]+(s[i+1][1]-s[i][1])*f,
+          s[i][2]+(s[i+1][2]-s[i][2])*f];
 }
+const loadPoint = () => {
+  const e=env();
+  return new THREE.Vector3(0, mm((loadFrac.y-0.5)*e.d), mm((loadFrac.z-0.5)*e.h));
+};
 
 function drawGuides(){
-  const u=unitMm(), w=+$('ew').value,d=+$('ed').value,h=+$('eh').value;
-  halfNorm=[w/2/u, d/2/u, h/2/u];
-  [envBox,wallPlane,loadArrow,loadHandle,aimHandle,...envHandles]
-    .forEach(o=>o&&scene.remove(o));
-  envHandles=[];
-  const g=new THREE.BoxGeometry(halfNorm[0]*2,halfNorm[1]*2,halfNorm[2]*2);
-  envBox=new THREE.LineSegments(new THREE.EdgesGeometry(g),
-    new THREE.LineBasicMaterial({color:0xe8d44d,transparent:true,opacity:0.75}));
-  envBox.visible=showEnv; scene.add(envBox);
-  wallPlane=new THREE.Mesh(new THREE.PlaneGeometry(halfNorm[0]*2.8,halfNorm[2]*2.8),
-    new THREE.MeshBasicMaterial({color:0x2a2f3a,side:THREE.DoubleSide,
-      transparent:true,opacity:0.55}));
-  wallPlane.rotation.x=Math.PI/2; wallPlane.position.y=-halfNorm[1];
-  wallPlane.visible=showEnv; scene.add(wallPlane);
+  const e=env();
+  [envBox,wallGrid,arrow,ball,cone,...tabs].forEach(o=>o&&scene.remove(o));
+  tabs=[];
+  const hx=mm(e.w/2), hy=mm(e.d/2), hz=mm(e.h/2);
+  envBox=new THREE.LineSegments(
+    new THREE.EdgesGeometry(new THREE.BoxGeometry(hx*2,hy*2,hz*2)),
+    new THREE.LineDashedMaterial({color:0xc9a227,dashSize:0.02,gapSize:0.014}));
+  envBox.computeLineDistances(); envBox.visible=showGuides; scene.add(envBox);
 
-  // envelope resize handles on the +x / +y / +z faces
-  [['x',0,new THREE.Vector3(halfNorm[0],0,0),'ew'],
-   ['y',1,new THREE.Vector3(0,halfNorm[1],0),'ed'],
-   ['z',2,new THREE.Vector3(0,0,halfNorm[2]),'eh']].forEach(([ax,ai,pos,inp])=>{
-    const hm=new THREE.Mesh(new THREE.BoxGeometry(0.055,0.055,0.055),
-      new THREE.MeshBasicMaterial({color:0xe8d44d}));
-    hm.position.copy(pos); hm.userData={role:'env',axis:ai,input:inp};
-    hm.visible=showEnv; scene.add(hm); envHandles.push(hm);
+  wallGrid=new THREE.GridHelper(Math.max(hx,hz)*3, 12, 0xd0d0c9, 0xe4e4de);
+  wallGrid.rotation.x=Math.PI/2; wallGrid.position.y=-hy;
+  wallGrid.visible=showGuides; scene.add(wallGrid);
+
+  // one tab per axis — dragging it changes ONLY that dimension
+  [[0,new THREE.Vector3(hx,0,0),'ew'],[1,new THREE.Vector3(0,hy,0),'ed'],
+   [2,new THREE.Vector3(0,0,hz),'eh']].forEach(([ax,pos,inp])=>{
+    const t=new THREE.Mesh(new THREE.BoxGeometry(0.03,0.03,0.03),
+      new THREE.MeshBasicMaterial({color:0xc9a227}));
+    t.position.copy(pos); t.userData={role:'env',axis:ax,input:inp};
+    t.visible=showGuides; scene.add(t); tabs.push(t);
   });
 
-  const lp=loadPointNorm(), dv=loadDir();
-  loadArrow=new THREE.ArrowHelper(dv,lp,0.36,0xe66767,0.1,0.055); scene.add(loadArrow);
-  loadHandle=new THREE.Mesh(new THREE.SphereGeometry(0.045,20,14),
-    new THREE.MeshBasicMaterial({color:0xe66767}));
-  loadHandle.position.copy(lp); loadHandle.userData={role:'move'}; scene.add(loadHandle);
-  aimHandle=new THREE.Mesh(new THREE.ConeGeometry(0.055,0.11,18),
-    new THREE.MeshBasicMaterial({color:0xff9a9a}));
-  aimHandle.position.copy(lp.clone().add(dv.clone().multiplyScalar(0.36)));
-  aimHandle.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),dv);
-  aimHandle.userData={role:'aim'}; scene.add(aimHandle);
-  $('dirReadout').textContent=`${dv.x.toFixed(2)}, ${dv.y.toFixed(2)}, ${dv.z.toFixed(2)}`;
+  const lp=loadPoint(), L=0.24;
+  arrow=new THREE.ArrowHelper(dir,lp,L,0xd8462a,0.07,0.038); scene.add(arrow);
+  ball=new THREE.Mesh(new THREE.SphereGeometry(0.026,22,16),
+    new THREE.MeshBasicMaterial({color:0xd8462a}));
+  ball.position.copy(lp); ball.userData={role:'move'}; scene.add(ball);
+  cone=new THREE.Mesh(new THREE.ConeGeometry(0.036,0.075,20),
+    new THREE.MeshBasicMaterial({color:0xef8a72}));
+  cone.position.copy(lp.clone().add(dir.clone().multiplyScalar(L)));
+  cone.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),dir);
+  cone.userData={role:'aim'}; scene.add(cone);
+
+  $('dims').innerHTML=`<b>${e.w} × ${e.d} × ${e.h}</b> mm<br>` +
+    `load ${Math.round(loadFrac.y*100)}% out · ${Math.round(loadFrac.z*100)}% up`;
+  $('roArm').textContent=`${Math.round(loadFrac.y*e.d)} mm`;
+  $('roDir').textContent=`${dir.x.toFixed(2)}, ${dir.y.toFixed(2)}, ${dir.z.toFixed(2)}`;
 }
-['ew','ed','eh','ldir','ln','mat'].forEach(id=>$(id).addEventListener('input',()=>{
-  drawGuides(); scheduleDesign(); }));
-['lpy','lpz'].forEach(id=>$(id).addEventListener('input',()=>{
-  $(id+'v').textContent=$(id).value+'%'; drawGuides(); scheduleDesign(); }));
+['ew','ed','eh'].forEach(id=>$(id).addEventListener('input',()=>{drawGuides(); schedule();}));
+['ln','mat'].forEach(id=>$(id).addEventListener('input',()=>schedule()));
 drawGuides();
 
-// ------------------------------------------------- 3D dragging
+// ------------------------------------------------- pointer interaction
 const ray=new THREE.Raycaster(), ndc=new THREE.Vector2();
 let drag=null;
-function toNdc(e){const r=renderer.domElement.getBoundingClientRect();
-  ndc.set(((e.clientX-r.left)/r.width)*2-1, -((e.clientY-r.top)/r.height)*2+1);}
-function viewPlaneAt(p){                 // plane through p facing the camera
-  const n=new THREE.Vector3(); camera.getWorldDirection(n);
-  return new THREE.Plane().setFromNormalAndCoplanarPoint(n,p);
-}
+const toNdc=e=>{const r=renderer.domElement.getBoundingClientRect();
+  ndc.set(((e.clientX-r.left)/r.width)*2-1, -((e.clientY-r.top)/r.height)*2+1);};
+const viewPlane=p=>{const n=new THREE.Vector3(); camera.getWorldDirection(n);
+  return new THREE.Plane().setFromNormalAndCoplanarPoint(n,p);};
+
 renderer.domElement.addEventListener('pointerdown',e=>{
   toNdc(e); ray.setFromCamera(ndc,camera);
-  const targets=[loadHandle,aimHandle,...envHandles].filter(Boolean);
-  const hit=ray.intersectObjects(targets)[0];
-  if(hit){ drag=hit.object.userData; controls.enabled=false;
-    view.classList.add('dragging'); }
+  const hit=ray.intersectObjects([ball,cone,...tabs].filter(Boolean))[0];
+  if(hit){drag=hit.object.userData; controls.enabled=false; view.classList.add('dragging');}
 });
 renderer.domElement.addEventListener('pointermove',e=>{
   toNdc(e);
   if(drag){
-    ray.setFromCamera(ndc,camera);
-    const hp=new THREE.Vector3();
+    ray.setFromCamera(ndc,camera); const hp=new THREE.Vector3(); const e2=env();
     if(drag.role==='move'){
       if(ray.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(1,0,0),0),hp)){
-        const fy=(hp.y/(2*halfNorm[1])+0.5)*100, fz=(hp.z/(2*halfNorm[2])+0.5)*100;
-        $('lpy').value=Math.max(25,Math.min(98,fy)); $('lpyv').textContent=Math.round($('lpy').value)+'%';
-        $('lpz').value=Math.max(8,Math.min(95,fz));  $('lpzv').textContent=Math.round($('lpz').value)+'%';
+        loadFrac.y=Math.min(0.98,Math.max(0.25, hp.y*SCENE_MM/e2.d+0.5));
+        loadFrac.z=Math.min(0.95,Math.max(0.05, hp.z*SCENE_MM/e2.h+0.5));
       }
     } else if(drag.role==='aim'){
-      const lp=loadPointNorm();
-      if(ray.ray.intersectPlane(viewPlaneAt(loadHandle.position),hp)){
-        const d=hp.sub(lp);
-        if(d.length()>1e-3){ customDir.copy(d.normalize());
-          $('ldir').value='custom'; }
+      if(ray.ray.intersectPlane(viewPlane(ball.position),hp)){
+        const d=hp.sub(loadPoint()); if(d.length()>1e-4) dir.copy(d.normalize());
       }
-    } else if(drag.role==='env'){
-      const axis=[new THREE.Vector3(1,0,0),new THREE.Vector3(0,1,0),
-                  new THREE.Vector3(0,0,1)][drag.axis];
-      const cur=axis.clone().multiplyScalar(halfNorm[drag.axis]);
-      if(ray.ray.intersectPlane(viewPlaneAt(cur),hp)){
-        const halfN=Math.max(0.05,hp.dot(axis));       // normalized half-extent
-        // convert to mm: half_norm = (mm/2)/u, and u depends on all three,
-        // so solve iteratively-lite: scale the current mm by the ratio
-        const ratio=halfN/Math.max(halfNorm[drag.axis],1e-6);
-        const inp=$(drag.input);
-        inp.value=Math.round(Math.max(25,Math.min(400,+inp.value*ratio)));
+    } else {                                  // envelope: single axis only
+      const ax=[new THREE.Vector3(1,0,0),new THREE.Vector3(0,1,0),
+                new THREE.Vector3(0,0,1)][drag.axis];
+      if(ray.ray.intersectPlane(viewPlane(tabs[drag.axis].position),hp)){
+        const halfMm=Math.abs(hp.dot(ax))*SCENE_MM;
+        $(drag.input).value=Math.round(Math.min(400,Math.max(25,halfMm*2)));
       }
     }
-    drawGuides(); scheduleDesign();
+    drawGuides(); schedule();
     return;
   }
-  if(meshObj&&lastPaint&&meshObj.userData.vals){
+  if(part && painted && part.userData.vals){
     ray.setFromCamera(ndc,camera);
-    const hits=ray.intersectObject(meshObj), ro=$('readout');
-    if(hits.length){ ro.style.display='block';
-      ro.textContent=`${lastPaint}: ${meshObj.userData.fmt(meshObj.userData.vals[hits[0].face.a])}`;
-    } else ro.style.display='none';
+    const h=ray.intersectObject(part)[0], ro=$('readout');
+    if(h){ro.style.display='block'; ro.textContent=part.userData.fmt(part.userData.vals[h.face.a]);}
+    else ro.style.display='none';
   }
 });
-window.addEventListener('pointerup',()=>{
-  if(drag){ drag=null; controls.enabled=true; view.classList.remove('dragging');
-    scheduleDesign(true); }   // settle: full-quality pass
+addEventListener('pointerup',()=>{
+  if(drag){drag=null; controls.enabled=true; view.classList.remove('dragging'); schedule(true);}
 });
 
-// ------------------------------------------------- live design pipeline
-window.toggleLive=()=>{ liveOn=!liveOn; $('btnLive').classList.toggle('on',liveOn);
-  $('btnLive').textContent=(liveOn?'● ':'○ ')+'live updates';
-  if(liveOn) scheduleDesign(true); };
-
-function scheduleDesign(settle){
+// ------------------------------------------------- design pipeline
+window.toggleLive=()=>{liveOn=!liveOn; $('btnLive').classList.toggle('on',liveOn);
+  if(liveOn) schedule(true);};
+function schedule(settle){
   if(!liveOn) return;
-  clearTimeout(designTimer);
-  designTimer=setTimeout(()=>runDesign({fast:!settle}), settle?120:380);
+  clearTimeout(timer);
+  timer=setTimeout(()=>design({fast:!settle}), settle?100:340);
 }
-
-async function rebuildTokens(){
-  const dv=loadDir();
-  const mk=await(await api('/make_tokens',{
-    envelope_mm:[+$('ew').value,+$('ed').value,+$('eh').value],
-    load_pos_frac:[0.5,$('lpy').value/100,$('lpz').value/100],
-    load_dir:[dv.x,dv.y,dv.z],
+async function tokens(){
+  const e=env();
+  const mk=await(await api('/make_tokens',{envelope_mm:[e.w,e.d,e.h],
+    load_pos_frac:[0.5,loadFrac.y,loadFrac.z], load_dir:[dir.x,dir.y,dir.z],
     load_N:+$('ln').value, material:$('mat').value, n_holes:3})).json();
-  currentTokens=mk.tokens; return mk;
+  curTokens=mk.tokens; unitMm=mk.unit_mm; return mk;
 }
-
-async function runDesign({fast=true, n=1}={}){
+function showSizing(c){
+  const p=c.params, s=c.sizing||{};
+  $('roStyle').textContent=p.reinforcement + (p.lightweight!=='none'?` + ${p.lightweight}`:'');
+  $('roPlates').textContent=`${p.tw.toFixed(1)} / ${p.tf.toFixed(1)} mm`;
+  $('roBolts').textContent=`${p.n_holes} × M${Math.round(p.hole_dia-0.5)}`;
+  $('roMass').textContent=c.mass_g?`${c.mass_g.toFixed(0)} g`:'—';
+  const u=s.utilisation!=null?s.utilisation:null;
+  $('roUtil').textContent=u!=null?`${(u*100).toFixed(0)}% of yield`:'—';
+  const bar=$('utilBar'); bar.className='bar'+(u>0.85?' over':u>0.6?' hot':'');
+  bar.firstElementChild.style.width=Math.min(100,(u||0)*100)+'%';
+  const notes=[...(s.notes||[])];
+  if(s.sized_up) notes.unshift(`plates raised from the agent's ${s.agent_tf_mm} mm ` +
+    `to the ${s.tf_floor_mm} mm beam-theory floor`);
+  $('sizeNote').innerHTML=notes.length?`<div class="note">${notes.join('<br>')}</div>`:'';
+}
+async function design({fast=true}={}){
   if(inflight) inflight.abort();
-  const ctl=new AbortController(); inflight=ctl; busy=true;
+  const ctl=new AbortController(); inflight=ctl;
   try{
-    say(fast?'designing (live preview)…':'designing at full quality…');
-    await rebuildTokens();
-    const g=await(await api('/generate',{tokens:currentTokens,n,
-      seed:Math.floor(Math.random()*1e6),mode:'designer',rank:!fast},
-      ctl.signal)).json();
-    if(!g.candidates.length){ say('no bracket fits that request — grow the box or move the load'); return; }
-    const c=g.candidates[0]; currentId=c.latent_id;
-    await showMesh(currentId, fast?96:150, ctl.signal);
-    const p=c.params;
-    say(`${p.reinforcement}${p.lightweight!=='none'?' +'+p.lightweight:''} · ` +
-        `plates ${p.tw.toFixed(1)}/${p.tf.toFixed(1)}mm · reach ${p.Lf.toFixed(0)} · ` +
-        `drop ${p.Lw.toFixed(0)}mm · arm ${c.arm_mm}mm` +
-        (c.mass_g?` · ${c.mass_g.toFixed(0)} g`:''));
-    if(!fast && lastPaint) await paint(true);
+    say(fast?'designing…':'sizing + ranking…');
+    await tokens();
+    const g=await(await api('/generate',{tokens:curTokens,n:1,
+      seed:Math.floor(Math.random()*1e6),mode:'designer',rank:!fast},ctl.signal)).json();
+    if(!g.candidates.length){say('no bracket fits — grow the envelope or move the load'); return;}
+    const c=g.candidates[0]; curId=c.latent_id;
+    showSizing(c);
+    await showPart(curId, fast?96:150, ctl.signal);
+    if(!fast && painted) await paint(true);
+    say(fast?'live preview':'sized by beam theory, ranked by the surrogate');
   }catch(e){ if(e.name!=='AbortError') say('ERROR: '+e.message); }
-  finally{ busy=false; }
 }
-
-// ---------------------------------------------------------------- mesh
-async function showMesh(lid, res=150, signal){
+async function showPart(lid,res=150,signal){
   const m=await(await api('/mesh',{latent_id:lid,resolution:res},signal)).json();
-  if(meshObj){ scene.remove(meshObj); meshObj.geometry.dispose(); }
-  const geo=new THREE.BufferGeometry(); meshVerts=m.verts;
-  geo.setAttribute('position',new THREE.Float32BufferAttribute(m.verts.flat(),3));
-  geo.setIndex(m.faces.flat());
-  if(m.normals) geo.setAttribute('normal',new THREE.Float32BufferAttribute(m.normals.flat(),3));
-  else geo.computeVertexNormals();
-  meshObj=new THREE.Mesh(geo,new THREE.MeshStandardMaterial({
-    color:0xc2cad6, metalness:0.35, roughness:0.42, side:THREE.DoubleSide,
-    clippingPlanes:[clipPlane], wireframe:wire}));
-  scene.add(meshObj);
+  if(part){scene.remove(part); part.geometry.dispose();}
+  const g=new THREE.BufferGeometry(); partVerts=m.verts;
+  const k=unitMm/SCENE_MM;                       // normalized -> scene units
+  g.setAttribute('position',new THREE.Float32BufferAttribute(
+    m.verts.flat().map((v,i)=>v*k),3));
+  g.setIndex(m.faces.flat());
+  if(m.normals) g.setAttribute('normal',new THREE.Float32BufferAttribute(m.normals.flat(),3));
+  else g.computeVertexNormals();
+  part=new THREE.Mesh(g,new THREE.MeshStandardMaterial({color:0xb6bcc4,
+    metalness:0.45,roughness:0.38,side:THREE.DoubleSide,
+    clippingPlanes:[clip],wireframe:wire}));
+  scene.add(part);
 }
 
-window.generate=async(alternatives)=>{
+window.generate=async()=>{
   try{
     say('designing alternatives…');
-    await rebuildTokens();
-    const g=await(await api('/generate',{tokens:currentTokens,
-      n:+$('genN').value, seed:Math.floor(Math.random()*1e6),
-      mode:'designer', rank:true})).json();
+    await tokens();
+    const g=await(await api('/generate',{tokens:curTokens,n:4,
+      seed:Math.floor(Math.random()*1e6),mode:'designer',rank:true})).json();
     const box=$('cands'); box.innerHTML='';
-    if(!g.candidates.length){ say('no design fits that request'); return; }
+    if(!g.candidates.length){say('no design fits that request'); return;}
     g.candidates.forEach((c,i)=>{
       const p=c.params, d=document.createElement('div'); d.className='cand';
-      d.innerHTML=`<b>#${i+1} ${p.reinforcement}</b>` +
-        (p.lightweight!=='none'?` +${p.lightweight}`:'') +
-        (c.peak_vm_pred?` · σ̂ ${(c.peak_vm_pred/1e6).toFixed(0)}MPa`:'') +
-        `<br>plates ${p.tw.toFixed(1)}/${p.tf.toFixed(1)}mm · ${p.n_holes} bolts` +
-        `<br>reach ${p.Lf.toFixed(0)} × drop ${p.Lw.toFixed(0)}mm` +
+      d.innerHTML=`<b>${p.reinforcement}</b>${p.lightweight!=='none'?' + '+p.lightweight:''}` +
+        `<br>${p.tw.toFixed(1)}/${p.tf.toFixed(1)} mm · ${p.n_holes} bolts` +
+        (c.sizing?` · ${(c.sizing.utilisation*100).toFixed(0)}% yield`:'') +
         (c.mass_g?` · ${c.mass_g.toFixed(0)} g`:'');
       d.onclick=async()=>{document.querySelectorAll('.cand').forEach(x=>x.classList.remove('sel'));
-        d.classList.add('sel'); currentId=c.latent_id;
-        await showMesh(currentId,150); await paint();};
+        d.classList.add('sel'); curId=c.latent_id; showSizing(c);
+        await showPart(curId,150); await paint();};
       box.appendChild(d);
     });
-    currentId=g.candidates[0].latent_id; box.firstChild.classList.add('sel');
-    await showMesh(currentId,150); await paint();
-    say(`${g.candidates.length} alternatives ranked by predicted stress — click to compare`);
-  }catch(e){ say('ERROR: '+e.message); }
+    const c0=g.candidates[0]; curId=c0.latent_id; box.firstChild.classList.add('sel');
+    showSizing(c0); await showPart(curId,150); await paint();
+    say('4 alternatives · ranked by predicted stress');
+  }catch(e){say('ERROR: '+e.message);}
 };
 
 window.paint=async(quiet)=>{
-  const field=$('fieldSel').value; lastPaint=field;
-  if(!currentId||!meshObj) return;
-  if(!field){ meshObj.material.vertexColors=false; meshObj.material.needsUpdate=true;
-    $('legend').style.display='none'; $('readout').style.display='none'; return; }
+  const f=$('fieldSel').value; painted=f;
+  if(!curId||!part) return;
+  if(!f){part.material.vertexColors=false; part.material.needsUpdate=true;
+    $('legend').style.display='none'; $('readout').style.display='none'; return;}
   try{
-    if(!quiet) say(`computing ${field} on ${meshVerts.length.toLocaleString()} surface points…`);
-    const r=await(await api('/query_points',{latent_id:currentId,field_id:field,
-      tokens:currentTokens,points:meshVerts})).json();
-    let v=r.values, st=r.stats;
-    const isVm=field==='von_mises';
-    if(isVm) v=v.map(x=>Math.log10(Math.max(x,1)));
-    // robust range: 2–98 percentile (loop, never spread — arrays are big)
+    if(!quiet) say(`computing ${f}…`);
+    const r=await(await api('/query_points',{latent_id:curId,field_id:f,
+      tokens:curTokens,points:partVerts})).json();
+    const isVm=f==='von_mises', st=r.stats;
+    const v=isVm?r.values.map(x=>Math.log10(Math.max(x,1))):r.values;
     const sorted=Float64Array.from(v).sort();
     let lo=sorted[Math.floor(sorted.length*0.02)], hi=sorted[Math.floor(sorted.length*0.98)];
-    if(!(hi>lo)){ lo=sorted[0]; hi=sorted[sorted.length-1]; }
+    if(!(hi>lo)){lo=sorted[0]; hi=sorted[sorted.length-1];}
     const cols=new Float32Array(v.length*3);
-    for(let i=0;i<v.length;i++){ const c=cmap((v[i]-lo)/((hi-lo)||1));
-      cols[3*i]=c[0]; cols[3*i+1]=c[1]; cols[3*i+2]=c[2]; }
-    meshObj.geometry.setAttribute('color',new THREE.BufferAttribute(cols,3));
-    meshObj.material.vertexColors=true; meshObj.material.needsUpdate=true;
-    meshObj.userData.vals=r.values;
-    meshObj.userData.fmt=isVm?(x=>(x/1e6).toFixed(1)+' MPa'):(x=>x.toPrecision(3));
-    const L=$('legend'); L.style.display='block';
-    $('legendName').innerHTML=(isVm?'predicted stress (log₁₀ Pa)':field) +
-      (st.flat?' <span style="color:#f2d08a">— head is flat, see note</span>':'');
+    for(let i=0;i<v.length;i++){const c=ramp((v[i]-lo)/((hi-lo)||1));
+      cols[3*i]=c[0];cols[3*i+1]=c[1];cols[3*i+2]=c[2];}
+    part.geometry.setAttribute('color',new THREE.BufferAttribute(cols,3));
+    part.material.vertexColors=true; part.material.needsUpdate=true;
+    part.userData.vals=r.values;
+    part.userData.fmt=isVm?(x=>`${(x/1e6).toFixed(1)} MPa (predicted)`)
+                          :(x=>`${f}: ${x.toPrecision(3)}`);
+    $('legend').style.display='block';
+    $('legendName').textContent=isVm?'predicted stress · log₁₀ Pa':f;
     $('legMin').textContent=lo.toPrecision(3); $('legMax').textContent=hi.toPrecision(3);
-    if(st.flat && !quiet) say(`${field}: model output is nearly CONSTANT ` +
-      `(spread ${(st.rel_spread*100).toFixed(1)}%) — the stress head is still ` +
-      `training (finishing on the Spark). Verify gives solver truth meanwhile.`);
-    else if(!quiet) say(isVm?`stress painted · p50 ${(st.p50/1e6).toFixed(1)} MPa, ` +
-      `p98 ${(st.p98/1e6).toFixed(1)} MPa`:`${field} painted`);
-  }catch(e){ say('ERROR: '+e.message); }
+    if(st.flat&&!quiet) say(`${f}: model output is nearly constant — that head is ` +
+      `still training. Verify gives solver truth.`);
+    else if(!quiet) say(isVm?`stress painted · median ${(st.p50/1e6).toFixed(1)} MPa`:`${f} painted`);
+  }catch(e){ say(e.message.includes('503')?'field prediction needs the geometric-model checkpoint (--stage_b)':'ERROR: '+e.message); }
 };
 
 window.verify=async()=>{
-  if(!currentId){ say('design something first'); return; }
+  if(!curId){say('nothing to verify yet'); return;}
   try{
-    say('running REAL FEA on this design (30–90 s)…');
-    const sig=+$('sigMax').value*1e6;
-    const r=await(await api('/verify',{latent_id:currentId,tokens:currentTokens,
-      thresholds:{sigma_max:sig}})).json();
-    const solved=r.physics?(r.physics.verified_peak_vm/1e6).toFixed(1):'—';
-    const util=r.physics?(r.physics.verified_peak_vm/sig*100).toFixed(0):'—';
-    $('verdict').innerHTML=`<p><span class="badge ${r.pass?'pass':'fail'}">` +
-      `${r.pass?'PASS':'FAIL'}</span> solver peak <b>${solved} MPa</b> ` +
-      `(${util}% of limit)<br><span style="color:#7d8697">machinable ` +
-      `${r.mfg.pass} · bolt holes ${r.mfg.holes_pass} · min wall ` +
-      `${(r.mfg.min_thickness*unitMm()).toFixed(1)}mm</span></p>`;
-    say('verified by the solver — ground truth, not a prediction');
-  }catch(e){ say('ERROR: '+e.message); }
+    say('solving with FEA at true scale (30–90 s)…');
+    const lim=+$('sigMax').value*1e6;
+    const r=await(await api('/verify',{latent_id:curId,tokens:curTokens,
+      thresholds:{sigma_max:lim}})).json();
+    const ph=r.physics||{};
+    const peak=ph.verified_peak_vm?(ph.verified_peak_vm/1e6).toFixed(1):'—';
+    const util=ph.utilisation_of_limit!=null?(ph.utilisation_of_limit*100).toFixed(0):'—';
+    $('verdict').innerHTML=`<span class="badge ${r.pass?'pass':'fail'}">` +
+      `${r.pass?'pass':'fail'}</span>
+      <div class="kv"><span>Solver peak</span><span>${peak} MPa</span></div>
+      <div class="kv dim"><span>of your limit</span><span>${util}%</span></div>
+      <div class="kv dim"><span>Tip deflection</span><span>${ph.max_disp_mm?ph.max_disp_mm.toFixed(2)+' mm':'—'}</span></div>
+      <div class="kv dim"><span>Machinable / holes</span><span>${r.mfg.pass?'ok':'no'} / ${r.mfg.holes_pass?'ok':'no'}</span></div>`;
+    say(ph.true_scale?'verified by the solver in real units — ground truth':'verified');
+  }catch(e){say('ERROR: '+e.message);}
 };
 
 window.exportStl=async()=>{
-  if(!currentId) return;
-  say('meshing at export resolution…');
-  const r=await api('/export',{latent_id:currentId,resolution:224});
+  if(!curId) return;
+  say('meshing for export…');
+  const r=await api('/export',{latent_id:curId,resolution:224});
   const a=document.createElement('a'); a.href=URL.createObjectURL(await r.blob());
-  a.download=`bracket_${currentId.slice(0,8)}.stl`; a.click(); say('STL downloaded');
+  a.download=`geofield_bracket_${curId.slice(0,8)}.stl`; a.click(); say('STL downloaded');
 };
-
-// ---------------------------------------------------------------- view tools
 $('clip').addEventListener('input',e=>{
-  const f=+e.target.value/100;
-  clipPlane.constant = f>=1 ? 10 : (-halfNorm[1] + f*2*halfNorm[1]);
+  const f=+e.target.value/100, hy=mm(env().d/2);
+  clip.constant = f>=1 ? 10 : (-hy + f*2*hy);
 });
-window.toggleWire=()=>{ wire=!wire; $('btnWire').classList.toggle('on',wire);
-  if(meshObj){ meshObj.material.wireframe=wire; meshObj.material.needsUpdate=true; } };
-window.toggleEnv=()=>{ showEnv=!showEnv; $('btnEnv').classList.toggle('on',!showEnv);
-  if(envBox) envBox.visible=showEnv;
-  if(wallPlane) wallPlane.visible=showEnv;
-  envHandles.forEach(h=>h.visible=showEnv); };
-window.resetView=()=>{ camera.position.copy(HOME); controls.target.set(0,0,0); };
-window.snap=()=>{ renderer.render(scene,camera);
+window.toggleWire=()=>{wire=!wire; $('btnWire').classList.toggle('on',wire);
+  if(part){part.material.wireframe=wire; part.material.needsUpdate=true;}};
+window.toggleEnv=()=>{showGuides=!showGuides; $('btnEnv').classList.toggle('on',showGuides);
+  [envBox,wallGrid,...tabs].forEach(o=>o&&(o.visible=showGuides));};
+window.resetView=()=>{camera.position.copy(HOME); controls.target.set(0,0,0);};
+window.snap=()=>{renderer.render(scene,camera);
   const a=document.createElement('a'); a.href=renderer.domElement.toDataURL('image/png');
-  a.download='geofield_view.png'; a.click(); };
-$('btnEnv').classList.add('on');
-runDesign({fast:false});   // first design on load, so the viewport is never empty
+  a.download='geofield.png'; a.click();};
+
+design({fast:false});
 </script>
 </body>
 </html>

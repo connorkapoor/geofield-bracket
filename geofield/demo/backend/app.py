@@ -159,6 +159,10 @@ class Engine:
                           float(mat.params["E"]), float(mat.params["yield"]),
                           arm_mm=arm_mm)
         designs = self.designer.design(feats, n=n, seed=seed)
+        from ...model.sizing import size_bracket
+        dirv = load.params["direction"]
+        force_n = float(load.params["magnitude"])
+        yield_pa = float(mat.params["yield"])
         out = []
         # canonical frame: wall back face at y=0, shelf TOP at z=0, wall leg
         # descending. Place canonical z=0 at the LOAD's height so the shelf
@@ -177,6 +181,30 @@ class Engine:
             p["Lw"] = float(min(max(p["Lw"], min_wall), avail_h * 0.98))
             if p["Lw"] < 25.0 or p["Lf"] < 25.0:
                 continue   # request leaves no room for a real bracket here
+
+            # ---- PHYSICS SIZING ------------------------------------------
+            # The designer proposes proportions and style; beam theory (with
+            # the FEA-calibrated fillet factor) sets hard floors on the plate
+            # thicknesses and picks/overrides the reinforcement strategy for
+            # off-axis loads. Two passes: the first decides the style, the
+            # second credits the arm relief that style provides.
+            dvec = (float(dirv[0]), float(dirv[1]), float(dirv[2]))
+            s0 = size_bracket(force_n, dvec, arm_mm, p["W"], p["Lw"], yield_pa,
+                              hole_dia_mm=p.get("hole_dia", 6.6),
+                              style_hint=p.get("reinforcement"))
+            reach = 0.0
+            if s0.style in ("gusset", "ribs"):
+                reach = float(p.get("gusset_a", 0.5)) * max(p["Lf"] - p["tw"], 0)
+            s = size_bracket(force_n, dvec, arm_mm, p["W"], p["Lw"], yield_pa,
+                             hole_dia_mm=p.get("hole_dia", 6.6),
+                             reinforcement_reach_mm=reach, style_hint=None)
+            agent_tf, agent_tw = p["tf"], p["tw"]
+            p["tf"] = max(p["tf"], s.tf_min_mm)
+            p["tw"] = max(p["tw"], s.tw_min_mm)
+            p["reinforcement"] = s.style
+            p["n_holes"] = max(int(p.get("n_holes", 3)), s.n_holes_min)
+            p["gusset_x"] = s.asym_x
+            sized_up = (p["tf"] > agent_tf + 0.05 or p["tw"] > agent_tw + 0.05)
             try:
                 f_mm, toks_c, meta = l_bracket.build_from_params(p)
             except Exception:  # noqa: BLE001
@@ -210,12 +238,29 @@ class Engine:
             # verifying against holes that were never cut fails spuriously.
             tokens_geo = [t for t in tokens if t.type != "fixed_point"] + toks_n
             lid = self.store(lat, tokens_geo, field_fn=fn, field_obj=f_norm)
+            # keep the mm-frame artifacts so verification can solve at the
+            # TRUE physical scale (the normalized frame is ~6x too big)
+            self.latents[lid]["mm"] = {
+                "field_mm": f_mm, "tokens_mm": toks_c, "meta": meta,
+                "unit_mm": u, "material": mat.params.get("name", "Al6061"),
+                "case": {"pos_mm": torch.tensor([0.0, arm_mm, 0.0]),
+                         "dir": dirv.clone(),
+                         "grip_mm": max(6.0, 0.12 * float(env_mm[0])),
+                         "target_yield_fraction": 1.0},
+                "force_n": force_n}
             out.append({"latent_id": lid, "volume": vol, "peak_vm_pred": peak,
                         "designed": True, "ranked": bool(do_rank),
                         "mass_g": vol * (4 / 3 * 3.14159 * 0.45 ** 3)
                             * (u * 1e-3) ** 3
                             * float(mat.params["density"]) * 1000.0,
                         "arm_mm": round(arm_mm, 1),
+                        "sizing": {"utilisation": round(s.utilisation, 3),
+                                   "tf_floor_mm": round(s.tf_min_mm, 2),
+                                   "tw_floor_mm": round(s.tw_min_mm, 2),
+                                   "agent_tf_mm": round(agent_tf, 2),
+                                   "sized_up": bool(sized_up),
+                                   "over_capacity": bool(s.over_capacity),
+                                   "notes": s.notes},
                         "params": {k: (round(v, 2) if isinstance(v, float) else v)
                                    for k, v in p.items()}})
         if out and out[0]["peak_vm_pred"] is not None:
@@ -675,7 +720,34 @@ def verify(req: VerifyReq):
         rep["mfg"] = verify_mfg(ENGINE.model, entry["lat"], tokens,
                                 a_max=th["a_max"], t_min=th["t_min"],
                                 field_fn=ffn)
-        if th["sigma_max"] and any(t.type == "load" for t in tokens):
+        mm = entry.get("mm")
+        if th["sigma_max"] and mm is not None:
+            # TRUE-SCALE verification: solve the mm-frame geometry in SI with
+            # the same validated LBracketFEA path used to label the dataset.
+            # (Solving the normalized frame treats a 200 mm part as ~1.3 m and
+            # under-reports stress by ~100x — that bug is why thin designs
+            # used to "pass".)
+            from ...labels.physics import LBracketFEA
+            solver = LBracketFEA(mm["field_mm"],
+                                 [t for t in mm["tokens_mm"]
+                                  if t.type == "fixed_point"],
+                                 mm["meta"], mm["material"], device="cpu")
+            lo = torch.tensor(mm["meta"]["aabb"]["lo"])
+            hi = torch.tensor(mm["meta"]["aabb"]["hi"])
+            g = torch.Generator().manual_seed(0)
+            q = lo + torch.rand(3000, 3, generator=g) * (hi - lo)
+            out, _ = solver.solve_case(mm["case"], q, force_n=mm["force_n"])
+            yield_pa = next((float(t.params["yield"]) for t in tokens
+                             if t.type == "material"), th["sigma_max"])
+            rep["physics"] = {
+                "verified_peak_vm": out.peak_vm,
+                "utilisation_of_limit": out.peak_vm / max(th["sigma_max"], 1e-9),
+                "utilisation_of_yield": out.peak_vm / max(yield_pa, 1e-9),
+                "max_disp_mm": out.max_disp * 1e3,
+                "solver_residual": out.residual,
+                "true_scale": True,
+                "pass": out.peak_vm <= th["sigma_max"]}
+        elif th["sigma_max"] and any(t.type == "load" for t in tokens):
             rep["physics"] = verify_physics(ENGINE.model, entry["lat"], tokens,
                                             th["sigma_max"], device="cpu",
                                             field_fn=ffn)
@@ -692,6 +764,9 @@ def verify(req: VerifyReq):
                                                 tokens, th["sigma_max"],
                                                 device=ENGINE.device)
     rep["pass"] = rep["mfg"]["pass"] and rep.get("physics", {}).get("pass", True)
+    mm = entry.get("mm")
+    if mm and "min_thickness" in rep.get("mfg", {}):
+        rep["mfg"]["min_thickness_mm"] = rep["mfg"]["min_thickness"] * mm["unit_mm"]
     return json.loads(json.dumps(rep, default=float))
 
 

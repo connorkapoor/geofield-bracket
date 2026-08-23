@@ -277,8 +277,11 @@ def build_from_params(p: dict) -> tuple[Field, list[Token], dict]:
         a = max(8.0, min(float(p.get("gusset_a", 0.4)) * (Lf - tw), Lf - tw - 5))
         b = max(8.0, min(float(p.get("gusset_b", 0.4)) * (Lw - tf), Lw - tf - 5))
         gw = W if p.get("gusset_full", True) else max(0.25 * W, 4.0)
+        # gusset_x in [-1,1] offsets the web across the width for off-centre
+        # load paths; clamped so it stays inside the plates
+        gx = float(p.get("gusset_x", 0.0)) * max(0.0, (W - gw) / 2.0)
         gbox = Box([gw / 2, (a + 2) / 2, (b + 2) / 2]).transform(
-            e3, torch.tensor([0.0, tw + (a - 2) / 2, -tf - (b - 2) / 2]))
+            e3, torch.tensor([gx, tw + (a - 2) / 2, -tf - (b - 2) / 2]))
         nrm = torch.tensor([0.0, b, -a])
         nrm = nrm / torch.linalg.vector_norm(nrm)
         d = float(nrm @ torch.tensor([0.0, tw + a, -tf]))
@@ -289,9 +292,10 @@ def build_from_params(p: dict) -> tuple[Field, list[Token], dict]:
     elif p.get("reinforcement") == "ribs":
         n_ribs = max(1, min(2, int(p.get("ribs_n", 1))))
         rr = max(2.0, float(p.get("ribs_r", 0.45)) * min(tw, tf))
-        a = 0.5 * (Lf - tw) * 0.85
-        b = 0.5 * (Lw - tf) * 0.85
-        xs = [0.0] if n_ribs == 1 else [-W * 0.28, W * 0.28]
+        a = float(p.get("gusset_a", 0.5)) * (Lf - tw) * 0.85
+        b = float(p.get("gusset_b", 0.5)) * (Lw - tf) * 0.85
+        gx = float(p.get("gusset_x", 0.0)) * W * 0.25
+        xs = [gx] if n_ribs == 1 else [gx - W * 0.28, gx + W * 0.28]
         for xi in xs:
             A = torch.tensor([xi, tw + a, -tf + rr * 0.3])
             B = torch.tensor([xi, tw - rr * 0.3, -tf - b])

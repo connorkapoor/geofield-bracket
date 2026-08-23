@@ -585,10 +585,16 @@ class LBracketFEA:
         q_eval = q_eval - 0.75 * g.h * gq * (1 - mask).unsqueeze(-1)
         return mask, q_eval
 
-    def solve_case(self, case: dict, query_mm: Tensor,
-                   tol: float = 1e-6, query_ctx=None) -> tuple[FEAResult, float]:
-        """Unit-force AMG solve, then calibrate F so peak VM hits the target
-        yield fraction. Returns (FEAResult in final units, magnitude_N)."""
+    def solve_case(self, case: dict, query_mm: Tensor, tol: float = 1e-6,
+                   query_ctx=None, force_n: float | None = None
+                   ) -> tuple[FEAResult, float]:
+        """Unit-force AMG solve, then scale.
+
+        force_n=None (dataset labelling): calibrate F so peak VM hits the
+        case's target yield fraction. force_n given (verification): use that
+        actual force. Either way the solve itself is done once at 1 N and
+        scaled — exact under linear elasticity.
+        """
         import numpy as np
 
         mat = MATERIALS[self.material]
@@ -630,7 +636,8 @@ class LBracketFEA:
                               for c in range(3)], dim=-1)
 
         peak = float(vm.max())
-        F = case["target_yield_fraction"] * mat["yield"] / max(peak, 1e-9)
+        F = (float(force_n) if force_n is not None
+             else case["target_yield_fraction"] * mat["yield"] / max(peak, 1e-9))
         return FEAResult(
             von_mises=(vm_q * F).float(),
             displacement=(disp_q * F).float(),

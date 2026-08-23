@@ -4,10 +4,10 @@ I built a system where you hand over a box and a load, and get back a shelf
 bracket that fits, holds, and can actually be machined — designed, stress-
 checked and solver-certified on local hardware.
 
-**Raw data.** Parametric L-brackets as unit-gradient distance fields — no
-meshes anywhere — labelled by a from-scratch immersed FEA solver (multigrid,
-validated to 10 %) across 10 000 load cases, with forces calibrated so peak
-stress spans 0.1–1.5 × yield: the regime where design decisions matter.
+**Raw data.** L-brackets as unit-gradient distance fields — no meshes anywhere
+— labelled by a from-scratch immersed FEA solver across 10 000 load cases, with
+forces calibrated so peak stress spans 0.1–1.5 × yield: the regime where design
+decisions actually matter.
 
 ![raw data](docs/dataset_record.png)
 
@@ -24,11 +24,14 @@ exact CSG where rules are perfect (geometry), simulation where trust matters.
 
 ![architecture](docs/system_diagram.png)
 
-**Result.** Drag the load in 3D; a new bracket appears in ~0.5 s, ranked by
-predicted stress, verified by real FEA, exported as STL.
+**Result.** Drag the load in 3D and a bracket appears in ~0.5 s — sized by beam
+theory, ranked by the surrogate, certified by FEA, exported as STL. Change the
+load *direction* and the strategy changes: centred gusset for a downward load,
+twin offset ribs for an off-axis one.
 
-![result](docs/load_follows.png)
+![result](docs/direction_aware.png)
 
 Encoding geometry **and** physics **and** manufacturability in one shared
-latent — with typed condition tokens so a new domain is a head, not a rewrite
-— is the unusual part. Code, weights and the honest failure log: MIT licensed.
+latent — with typed condition tokens, so a new domain is a head, not a rewrite
+— is the unusual part. Code, weights and the honest failure log (including the
+verification bug that made every thin design "pass"): AGPL-3.0.
