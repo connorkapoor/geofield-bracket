@@ -1,0 +1,39 @@
+GeoField — NOTICE
+=================
+
+Copyright (C) 2026 Connor Kapoor
+
+Licensed under the GNU Affero General Public License v3.0 (see LICENSE).
+In short:
+
+  * ATTRIBUTION — keep the copyright and licence notices intact.
+  * SHARE ALIKE — if you distribute a modified version, or run a modified
+    version as a network service (including a hosted demo), you must make your
+    modified source available under this same licence.
+
+AGPL-3.0 was chosen over GPL-3.0 specifically because the reference artifact is
+a web application: section 13 ensures users of a hosted, modified GeoField can
+obtain its source.
+
+If AGPL blocks a use you believe should be allowed, open an issue — the intent
+is "share improvements back", not "make this unusable".
+
+
+ENGINEERING DISCLAIMER
+----------------------
+
+This is a research demonstrator. The finite-element solver, the learned stress
+surrogate, the closed-form sizing checks, and the design agent are NOT
+qualified engineering tools. Nothing produced by this software should be relied
+on for any load-bearing, safety-critical, or commercial application without
+independent analysis and testing by a qualified engineer. See sections 15-17 of
+the licence for the full disclaimer of warranty.
+
+
+THIRD-PARTY COMPONENTS
+----------------------
+
+PyTorch (BSD-3), NumPy / SciPy (BSD-3), PyAMG (MIT), scikit-image (BSD-3),
+matplotlib (PSF-based), FastAPI / Starlette / Pydantic / Uvicorn (MIT/BSD),
+three.js (MIT, loaded from a CDN by the demo frontend). Each remains under its
+own licence.

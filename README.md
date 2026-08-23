@@ -427,7 +427,8 @@ the attention blocks is a ~2× win; the demo runs comfortably on CPU.
 **keep the attribution**, and **publish your changes** under the same licence.
 AGPL rather than GPL because the reference artifact is a web app: if you run a
 modified GeoField as a network service, its users are entitled to that source
-(licence §13). Full text and the engineering disclaimer in [`LICENSE`](LICENSE).
+(licence §13). Full text in [`LICENSE`](LICENSE); the plain-language summary,
+engineering disclaimer and third-party credits in [`NOTICE`](NOTICE).
 
 If AGPL blocks a use you think should be allowed, open an issue — the intent is
 "share improvements back", not "make this unusable".

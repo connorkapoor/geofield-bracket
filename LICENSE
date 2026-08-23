@@ -659,32 +659,3 @@ specific requirements.
 if any, to sign a "copyright disclaimer" for the program, if necessary.
 For more information on this, and how to apply and follow the GNU AGPL, see
 <https://www.gnu.org/licenses/>.
-
-
---------------------------------------------------------------------------
-
-HOW THIS APPLIES TO GeoField
-
-Copyright (C) 2026 Connor Kapoor
-
-GeoField is free software: you may use, study, share and modify it under the
-terms of the GNU Affero General Public License version 3 (above). In short:
-
-  * ATTRIBUTION — keep the copyright and licence notices intact.
-  * SHARE ALIKE — if you distribute a modified version, or run a modified
-    version as a network service (including a hosted demo), you must make
-    your modified source available under this same licence.
-
-AGPL-3.0 was chosen over GPL-3.0 specifically because the reference artifact
-is a web application: section 13 ensures users of a hosted, modified GeoField
-can obtain its source.
-
---------------------------------------------------------------------------
-
-ENGINEERING DISCLAIMER
-
-This is a research demonstrator. The finite-element solver, the learned stress
-surrogate, and the design agent are NOT qualified engineering tools. Nothing
-produced by this software should be relied on for any load-bearing, safety-
-critical, or commercial application without independent analysis and testing
-by a qualified engineer. See sections 15-17 of the licence above.
