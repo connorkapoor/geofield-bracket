@@ -577,8 +577,6 @@ function tourStep(now){
   if(raw>=1){ tourAct++; tourT0=now; tourFrom=snapshotState();
     design({fast:false}); }
 }
-// drive the tour from the render loop
-const _origLoop = requestAnimationFrame;
 (function tourLoop(){ requestAnimationFrame(tourLoop); if(tourOn) tourStep(performance.now()); })();
 
 design({fast:false});
