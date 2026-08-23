@@ -48,6 +48,10 @@ def required_thickness_mm(force_n: float, arm_mm: float, width_mm: float,
     return max(T_MIN_MM, t_m * 1e3)
 
 
+UNBRACED_T_MM = 6.0      # below this a plain plate is comfortably enough
+REACH_MIN, REACH_MAX = 0.35, 0.70
+
+
 @dataclass
 class Sizing:
     tf_min_mm: float          # free-leg (shelf) plate
@@ -57,6 +61,7 @@ class Sizing:
     n_holes_min: int
     utilisation: float        # of yield, at the sized geometry
     over_capacity: bool       # request needs more than T_MAX_MM
+    reach_frac: float = 0.0   # brace reach as a fraction of the free leg
     notes: list = dc_field(default_factory=list)
 
 
@@ -103,15 +108,34 @@ def size_bracket(force_n: float, direction: tuple[float, float, float],
         if f_y > 1.0 else T_MIN_MM
     tw = max(tw_z, tw_y)
 
-    # --- reinforcement strategy from the load direction --------------------
-    if style_hint in ("none", "gusset", "ribs"):
-        style = style_hint
-    elif dx > 0.35:
-        style = "ribs"      # off-axis: a single centred web does little
-    elif dz > 0.5:
-        style = "gusset"
-    else:
+    # --- reinforcement strategy -------------------------------------------
+    # A brace is warranted whenever the corner is carrying real moment. The
+    # test is the thickness a PLAIN plate would need: if that is comfortable,
+    # stay plain (cheaper to machine); otherwise brace, because a gusset buys
+    # section far more cheaply than thickness. Off-axis loads get ribs — a
+    # single centred web adds little torsional stiffness.
+    t_unbraced = max(
+        required_thickness_mm(f_z, arm_mm, width_mm, sig),
+        required_thickness_mm(f_x, max(width_mm * 0.5, 10.0), width_mm, sig)
+        if f_x > 1.0 else 0.0)
+    if style_hint in ("none", "gusset", "ribs") and t_unbraced <= UNBRACED_T_MM:
+        style = style_hint          # light load: honour the agent's taste
+    elif t_unbraced <= UNBRACED_T_MM:
         style = "none"
+    elif dx > 0.35:
+        style = "ribs"
+    else:
+        style = "gusset"
+
+    # Size the brace: reach scales with how badly the plain plate was
+    # struggling, so heavy/long-arm requests get a properly deep gusset
+    # instead of a decorative corner chamfer.
+    reach_frac = 0.0
+    if style in ("gusset", "ribs"):
+        span = max(T_MAX_MM - UNBRACED_T_MM, 1.0)
+        reach_frac = REACH_MIN + (REACH_MAX - REACH_MIN) * min(
+            1.0, (t_unbraced - UNBRACED_T_MM) / span)
+        reach_frac = max(REACH_MIN, min(REACH_MAX, reach_frac))
     if dx > 0.35:
         notes.append("lateral load component: twin ribs instead of a centred "
                      "gusset (a single web adds little torsional stiffness)")
@@ -137,4 +161,4 @@ def size_bracket(force_n: float, direction: tuple[float, float, float],
     util = bending_stress_pa(f_z or force_n, arm_eff, width_mm, tf) / yield_pa
     return Sizing(tf_min_mm=tf, tw_min_mm=tw, style=style, asym_x=asym_x,
                   n_holes_min=n_holes, utilisation=util, over_capacity=over,
-                  notes=notes)
+                  reach_frac=reach_frac, notes=notes)

@@ -90,6 +90,10 @@
     border-radius:var(--r);padding:10px 13px;font-size:11px;font-variant-numeric:tabular-nums;
     color:var(--ink2);line-height:1.7;text-align:right}
   #dims b{color:var(--ink);font-size:12px}
+  #caption{position:absolute;left:50%;transform:translateX(-50%);bottom:22px;
+    background:#15171aee;color:#fff;border-radius:20px;padding:9px 20px;font-size:12.5px;
+    letter-spacing:.03em;display:none;box-shadow:0 4px 18px #00000022}
+  #caption b{font-weight:700}
 </style>
 </head>
 <body>
@@ -133,6 +137,7 @@
     <div class="btnrow">
       <button id="btnLive" class="on" onclick="toggleLive()">live</button>
       <button onclick="generate()">show 4</button>
+      <button id="btnTour" onclick="toggleTour()">tour ▶</button>
     </div>
     <div id="cands"></div>
   </div>
@@ -178,6 +183,7 @@
   <span class="dot" style="background:var(--steel)"></span>drag empty space to orbit · scroll to zoom
 </div>
 <div id="dims"></div>
+<div id="caption"></div>
 <div id="legend"><div id="legendName"></div><div class="ramp"></div>
   <div class="ends"><span id="legMin"></span><span id="legMax"></span></div></div>
 <div id="readout"></div>
@@ -257,8 +263,13 @@ function drawGuides(){
     new THREE.LineDashedMaterial({color:0xc9a227,dashSize:0.02,gapSize:0.014}));
   envBox.computeLineDistances(); envBox.visible=showGuides; scene.add(envBox);
 
-  wallGrid=new THREE.GridHelper(Math.max(hx,hz)*3, 12, 0xd0d0c9, 0xe4e4de);
-  wallGrid.rotation.x=Math.PI/2; wallGrid.position.y=-hy;
+  // wall face: a thin outline only — no grid plane (it read as clutter and
+  // fought with the part's silhouette)
+  const wpts=[new THREE.Vector3(-hx,-hy,-hz),new THREE.Vector3(hx,-hy,-hz),
+              new THREE.Vector3(hx,-hy,hz),new THREE.Vector3(-hx,-hy,hz),
+              new THREE.Vector3(-hx,-hy,-hz)];
+  wallGrid=new THREE.Line(new THREE.BufferGeometry().setFromPoints(wpts),
+    new THREE.LineBasicMaterial({color:0xb9b9b2}));
   wallGrid.visible=showGuides; scene.add(wallGrid);
 
   // one tab per axis — dragging it changes ONLY that dimension
@@ -495,6 +506,80 @@ window.resetView=()=>{camera.position.copy(HOME); controls.target.set(0,0,0);};
 window.snap=()=>{renderer.render(scene,camera);
   const a=document.createElement('a'); a.href=renderer.domElement.toDataURL('image/png');
   a.download='geofield.png'; a.click();};
+
+// ------------------------------------------------- demo tour (screen-record)
+// Choreographed parameter sweep: every act tweens the request and the design
+// is regenerated continuously, so a recording shows the model responding
+// rather than a slideshow of stills.
+const ACTS = [
+  {t:5200, cap:'Load grows 150 N → 3000 N — a gusset appears and deepens',
+   to:{N:3000}, from:{N:150}},
+  {t:3800, cap:'Load walks back toward the wall — the shelf shortens, the brace shrinks',
+   to:{fy:0.32}},
+  {t:3800, cap:'…and out to the tip again — the brace grows back',
+   to:{fy:0.95}},
+  {t:4200, cap:'Load slides down the envelope — the whole bracket flips to meet it',
+   to:{fz:0.16}},
+  {t:3400, cap:'…and back up', to:{fz:0.88}},
+  {t:4600, cap:'Aiming the force sideways — twin offset ribs replace the centred gusset',
+   to:{dx:0.78, dz:-0.62}},
+  {t:3600, cap:'Pull-out direction — wall plate sized for bolt prying, more bolts',
+   to:{dx:0, dy:0.9, dz:-0.42}},
+  {t:3000, cap:'Back to a shelf load', to:{dx:0, dy:0, dz:-1}},
+  {t:4200, cap:'Envelope reach 160 → 300 mm — one dimension at a time',
+   to:{ed:300}},
+  {t:3600, cap:'Envelope height 200 → 320 mm', to:{eh:320}},
+  {t:3400, cap:'Envelope width 60 → 75 mm', to:{ew:75}},
+  {t:3200, cap:'Aluminium → steel: the same duty needs less section',
+   to:{mat:'Steel1018'}},
+  {t:4000, cap:'Back to the start', to:{N:400, fy:0.85, fz:0.85, ed:160, eh:200,
+                                        ew:60, mat:'Al6061'}},
+];
+let tourOn=false, tourAct=0, tourT0=0, tourFrom=null, lastTourDesign=0;
+const easeIO = x => x<0.5 ? 2*x*x : 1-Math.pow(-2*x+2,2)/2;
+const snapshotState = () => ({N:+$('ln').value, ew:+$('ew').value, ed:+$('ed').value,
+  eh:+$('eh').value, fy:loadFrac.y, fz:loadFrac.z,
+  dx:dir.x, dy:dir.y, dz:dir.z, mat:$('mat').value});
+
+window.toggleTour=()=>{
+  tourOn=!tourOn;
+  $('btnTour').classList.toggle('on',tourOn);
+  $('btnTour').textContent = tourOn ? 'tour ■' : 'tour ▶';
+  $('caption').style.display = tourOn ? 'block' : 'none';
+  controls.autoRotate = tourOn; controls.autoRotateSpeed = 0.45;
+  if(tourOn){ tourAct=0; tourT0=performance.now(); tourFrom=snapshotState();
+    if(!liveOn) toggleLive(); }
+  else say('tour stopped');
+};
+
+function tourStep(now){
+  if(!tourOn) return;
+  const act=ACTS[tourAct % ACTS.length];
+  const raw=Math.min(1,(now-tourT0)/act.t), k=easeIO(raw);
+  const from=Object.assign({}, tourFrom, act.from||{});
+  const to=act.to;
+  const lerp=(a,b)=>a+(b-a)*k;
+  if('N' in to)  $('ln').value = Math.round(lerp(from.N,to.N));
+  if('ew' in to) $('ew').value = Math.round(lerp(from.ew,to.ew));
+  if('ed' in to) $('ed').value = Math.round(lerp(from.ed,to.ed));
+  if('eh' in to) $('eh').value = Math.round(lerp(from.eh,to.eh));
+  if('fy' in to) loadFrac.y = lerp(from.fy,to.fy);
+  if('fz' in to) loadFrac.z = lerp(from.fz,to.fz);
+  if('dx' in to||'dy' in to||'dz' in to){
+    dir.set(lerp(from.dx,'dx' in to?to.dx:from.dx),
+            lerp(from.dy,'dy' in to?to.dy:from.dy),
+            lerp(from.dz,'dz' in to?to.dz:from.dz)).normalize();
+  }
+  if('mat' in to && raw>0.5) $('mat').value = to.mat;
+  $('caption').innerHTML = `<b>${tourAct % ACTS.length + 1}/${ACTS.length}</b> &nbsp; ${act.cap}`;
+  drawGuides();
+  if(now-lastTourDesign > 620){ lastTourDesign=now; design({fast:true}); }
+  if(raw>=1){ tourAct++; tourT0=now; tourFrom=snapshotState();
+    design({fast:false}); }
+}
+// drive the tour from the render loop
+const _origLoop = requestAnimationFrame;
+(function tourLoop(){ requestAnimationFrame(tourLoop); if(tourOn) tourStep(performance.now()); })();
 
 design({fast:false});
 </script>

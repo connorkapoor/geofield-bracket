@@ -57,8 +57,13 @@ where trust matters (certification).**
 The repo ships the 324 KB design agent, so the demo runs with **no large
 downloads and no GPU**. (Without the geometric-model checkpoint you get
 design + exact geometry + FEA verification + STL export; field *prediction*
-and candidate ranking need the big checkpoint — see
-[Reproducing](#reproducing-everything).)
+and candidate ranking need the big checkpoint.)
+
+The two field-model checkpoints are ~180 MB each and are published as release
+assets rather than committed. `bash scripts/fetch_models.sh` pulls them into
+`models/`. [**docs/MODELS.md**](docs/MODELS.md) says what each set of weights
+does, which parts of the demo need it, and which numbers come from closed-form
+engineering rather than from a network.
 
 ```bash
 git clone <your-fork-url> geofield && cd geofield

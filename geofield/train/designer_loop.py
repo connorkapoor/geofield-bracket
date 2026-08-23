@@ -25,7 +25,7 @@ from ..model.designer import (CONT, LIGHT, RANGES, REINF, ParamDesigner,
 
 
 def mine_pairs(data_dir: str, splits=("train", "val")) -> tuple:
-    feats, cont, reinf, light, holes = [], [], [], [], []
+    feats, cont, reinf, light, holes, masks = [], [], [], [], [], []
     n_rec = 0
     for split in splits:
         try:
@@ -57,6 +57,14 @@ def mine_pairs(data_dir: str, splits=("train", "val")) -> tuple:
             tvec = torch.tensor([
                 (min(max(tgt[k], RANGES[k][0]), RANGES[k][1]) - RANGES[k][0])
                 / (RANGES[k][1] - RANGES[k][0]) for k in CONT])
+            # MASK the brace-geometry slots on records that have no brace:
+            # regressing them toward 0 on 2/3 of the data collapsed the
+            # prediction, which produced decorative 20%-reach "gussets"
+            braced = meta.get("reinforcement", "none") != "none"
+            mvec = torch.ones(len(CONT))
+            if not braced:
+                for k in ("gusset_a", "gusset_b", "ribs_r"):
+                    mvec[CONT.index(k)] = 0.0
             t_reinf = REINF.index(meta.get("reinforcement", "none"))
             t_light = LIGHT.index(meta.get("lightweight", "none"))
             t_holes = min(max((meta.get("mount") or {}).get("n", 3), 2), 4) - 2
@@ -78,12 +86,14 @@ def mine_pairs(data_dir: str, splits=("train", "val")) -> tuple:
                                            MATERIALS[m]["yield"],
                                            arm_mm=float(pos[1])))
                     cont.append(tvec)
+                    masks.append(mvec)
                     reinf.append(t_reinf)
                     light.append(t_light)
                     holes.append(t_holes)
     print(f"mined {len(feats)} pairs from {n_rec} records")
     return (torch.stack(feats), torch.stack(cont),
-            torch.tensor(reinf), torch.tensor(light), torch.tensor(holes))
+            torch.tensor(reinf), torch.tensor(light), torch.tensor(holes),
+            torch.stack(masks))
 
 
 def main():
@@ -106,6 +116,7 @@ def main():
     R = torch.cat([p[2] for p in packs])
     L = torch.cat([p[3] for p in packs])
     K = torch.cat([p[4] for p in packs])
+    M = torch.cat([p[5] for p in packs])
 
     gen = torch.Generator().manual_seed(0)
     perm = torch.randperm(len(X), generator=gen)
@@ -117,14 +128,16 @@ def main():
     best = 1e9
     for step in range(1, args.steps + 1):
         idx = tr[torch.randint(len(tr), (args.batch,), generator=gen)]
-        loss = designer_loss(model(X[idx]), C[idx], R[idx], L[idx], K[idx])
+        loss = designer_loss(model(X[idx]), C[idx], R[idx], L[idx], K[idx],
+                             mask=M[idx])
         opt.zero_grad()
         loss.backward()
         opt.step()
         if step % 250 == 0:
             model.eval()
             with torch.no_grad():
-                vl = designer_loss(model(X[va]), C[va], R[va], L[va], K[va])
+                vl = designer_loss(model(X[va]), C[va], R[va], L[va], K[va],
+                                   mask=M[va])
                 pred = model(X[va])
                 acc_r = (pred[1].argmax(1) == R[va]).float().mean()
                 mae_mm = ((pred[0][:, 0] - C[va][:, 0]).abs().mean()

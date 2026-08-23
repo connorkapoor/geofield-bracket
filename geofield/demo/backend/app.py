@@ -192,9 +192,10 @@ class Engine:
             s0 = size_bracket(force_n, dvec, arm_mm, p["W"], p["Lw"], yield_pa,
                               hole_dia_mm=p.get("hole_dia", 6.6),
                               style_hint=p.get("reinforcement"))
-            reach = 0.0
-            if s0.style in ("gusset", "ribs"):
-                reach = float(p.get("gusset_a", 0.5)) * max(p["Lf"] - p["tw"], 0)
+            # the brace reach comes from the sizing rule, not the agent's
+            # washed-out regression (its target is 0 on unbraced records, so
+            # it predicts decorative 20% gussets even when it picks "gusset")
+            reach = s0.reach_frac * max(p["Lf"] - p["tw"], 0.0)
             s = size_bracket(force_n, dvec, arm_mm, p["W"], p["Lw"], yield_pa,
                              hole_dia_mm=p.get("hole_dia", 6.6),
                              reinforcement_reach_mm=reach, style_hint=None)
@@ -204,6 +205,9 @@ class Engine:
             p["reinforcement"] = s.style
             p["n_holes"] = max(int(p.get("n_holes", 3)), s.n_holes_min)
             p["gusset_x"] = s.asym_x
+            if s.reach_frac > 0:
+                p["gusset_a"] = s.reach_frac
+                p["gusset_b"] = s.reach_frac * 0.9   # slightly shorter down the wall
             sized_up = (p["tf"] > agent_tf + 0.05 or p["tw"] > agent_tw + 0.05)
             try:
                 f_mm, toks_c, meta = l_bracket.build_from_params(p)

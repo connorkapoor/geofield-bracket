@@ -115,9 +115,16 @@ class ParamDesigner(nn.Module):
 
 
 def designer_loss(pred, target_cont: Tensor, target_reinf: Tensor,
-                  target_light: Tensor, target_holes: Tensor) -> Tensor:
+                  target_light: Tensor, target_holes: Tensor,
+                  mask: Tensor | None = None) -> Tensor:
+    """mask [B, len(CONT)]: 0 where a continuous target is meaningless for
+    that record (e.g. gusset dimensions on an unbraced bracket)."""
     c, r, l, k = pred
-    mse = nn.functional.mse_loss(c, target_cont)
+    if mask is None:
+        mse = nn.functional.mse_loss(c, target_cont)
+    else:
+        se = (c - target_cont) ** 2 * mask
+        mse = se.sum() / mask.sum().clamp_min(1.0)
     ce = (nn.functional.cross_entropy(r, target_reinf)
           + nn.functional.cross_entropy(l, target_light)
           + nn.functional.cross_entropy(k, target_holes))
