@@ -470,10 +470,50 @@ window.paint=async(quiet)=>{
   }catch(e){ say(e.message.includes('503')?'field prediction needs the geometric-model checkpoint (--stage_b)':'ERROR: '+e.message); }
 };
 
+// SOLVER TRUTH on the surface, not the surrogate's guess. The archived
+// surrogate's stress head is collapsed (it returns ~10-13 kPa everywhere, a
+// 1.2x spread), so painting it would be a rainbow of noise; one real FEA solve
+// costs ~1.4 s and gives a 200x dynamic range. These magnitudes ARE
+// trustworthy — same code path as Verify — so the legend shows real numbers.
+window.feaPaint=async(quiet)=>{
+  if(!curId||!part||!partVerts) return;
+  try{
+    if(!quiet) say('solving FEA for the stress field…');
+    const r=await(await api('/fea_paint',{latent_id:curId,points:partVerts})).json();
+    const v=r.values.map(x=>Math.log10(Math.max(x,1e3)));
+    const sorted=Float64Array.from(v).sort();
+    let lo=sorted[Math.floor(sorted.length*0.02)], hi=sorted[Math.floor(sorted.length*0.98)];
+    if(!(hi>lo)){lo=sorted[0]; hi=sorted[sorted.length-1];}
+    const cols=new Float32Array(v.length*3);
+    for(let i=0;i<v.length;i++){const c=ramp((v[i]-lo)/((hi-lo)||1));
+      cols[3*i]=c[0];cols[3*i+1]=c[1];cols[3*i+2]=c[2];}
+    part.geometry.setAttribute('color',new THREE.BufferAttribute(cols,3));
+    part.material.vertexColors=true; part.material.needsUpdate=true;
+    part.userData.vals=r.values; painted='fea';
+    part.userData.fmt=(x=>`${(x/1e6).toFixed(1)} MPa (FEA)`);
+    $('legend').style.display='block';
+    $('legendName').textContent='FEA stress · MPa';
+    $('legMin').textContent=(Math.pow(10,lo)/1e6).toFixed(1);
+    $('legMax').textContent=(Math.pow(10,hi)/1e6).toFixed(0);
+    // Once the solver has spoken, the spec sheet shows ITS utilisation, not
+    // the beam-theory estimate. The two disagree — beam theory credits the
+    // gusset with more relief than the real part gets — and a recording that
+    // paints a part red while claiming 60% of yield is worse than one that
+    // admits the number.
+    const u=r.utilisation_of_yield;
+    $('roUtil').textContent=`${(u*100).toFixed(0)}% of yield (FEA)`;
+    const bar=$('utilBar'); bar.className='bar'+(u>0.85?' over':u>0.6?' hot':'');
+    bar.firstElementChild.style.width=Math.min(100,u*100)+'%';
+    if(!quiet) say(`FEA: peak ${(r.peak_vm/1e6).toFixed(0)} MPa · ` +
+      `${(u*100).toFixed(0)}% of yield · ${r.max_disp_mm.toFixed(2)} mm tip`);
+    return r;
+  }catch(e){ if(e.name!=='AbortError') say('ERROR: '+e.message); }
+};
+
 window.verify=async()=>{
   if(!curId){say('nothing to verify yet'); return;}
   try{
-    say('solving with FEA at true scale (30–90 s)…');
+    say('solving with FEA at true scale…');
     const lim=+$('sigMax').value*1e6;
     const r=await(await api('/verify',{latent_id:curId,tokens:curTokens,
       thresholds:{sigma_max:lim}})).json();
@@ -513,47 +553,46 @@ window.snap=()=>{renderer.render(scene,camera);
 // ------------------------------------------------- demo tour (screen-record)
 // Choreographed parameter sweep for recording a loop.
 //
-// A design round-trip is 0.4-7 s depending on what else the machine is doing,
-// so the tween CANNOT run on a wall clock alone — that is what made the first
-// version look broken (60 fps of tween against a 620 ms regeneration throttle:
-// every request aborted by its successor, the part frozen while the numbers
-// raced). Instead an act's progress is
+// STRICT hold-and-step. Two earlier versions let a wall clock tween the guides
+// while a design was in flight, so the part on screen always answered a
+// requirement the guides had already left — it read as the tour outrunning the
+// model, because it was. There is now exactly one sequential loop:
 //
-//     min(elapsed / act.t, designs_completed / PER_ACT)
+//     move the guides  ->  regenerate the part  ->  paint stress  ->  repeat
 //
-// so it is paced by whichever is slower. A fast backend is capped by act.t and
-// stays readable; a slow one drags the guides down to its own rate and the
-// motion stays matched to the geometry. The part still lags the guides by about
-// one design, which reads correctly on a recording: the requirement moves, then
-// the bracket answers it.
+// The guides only ever move inside tweenGuides(), which is never concurrent
+// with a request, so at every moment the frame is self-consistent: the part
+// you see is the answer to the arrow you see. Backend latency changes how long
+// each hold lasts and nothing else.
 const ACTS = [
-  {t:14000, cap:'Load grows 150 N → 3000 N — a gusset appears and deepens',
-   to:{N:3000}, from:{N:150}},
-  {t:11000, cap:'Load walks back toward the wall — the shelf shortens, the brace shrinks',
+  {cap:'Load grows 150 N → 3000 N — a gusset appears and deepens',
+   to:{N:3000}, from:{N:150}, steps:7},
+  {cap:'Load walks back toward the wall — the shelf shortens, the brace shrinks',
    to:{fy:0.32}},
-  {t:11000, cap:'…and out to the tip again — the brace grows back',
-   to:{fy:0.95}},
-  {t:12000, cap:'Load slides down the envelope — the whole bracket flips to meet it',
-   to:{fz:0.16}},
-  {t:10000, cap:'…and back up', to:{fz:0.88}},
-  {t:13000, cap:'Aiming the force sideways — offset ribs replace the centred gusset',
-   to:{dx:0.78, dz:-0.62}},
-  {t:11000, cap:'Pull-out direction — wall plate sized for bolt prying, more bolts',
+  {cap:'…and out to the tip again — the brace grows back', to:{fy:0.95}},
+  {cap:'Load slides down the envelope — the whole bracket flips to meet it',
+   to:{fz:0.16}, steps:5},
+  {cap:'…and back up', to:{fz:0.88}},
+  {cap:'Aiming the force sideways — offset ribs replace the centred gusset',
+   to:{dx:0.78, dz:-0.62}, steps:5},
+  {cap:'Pull-out direction — wall plate sized for bolt prying, more bolts',
    to:{dx:0, dy:0.9, dz:-0.42}},
-  {t:9000,  cap:'Back to a shelf load', to:{dx:0, dy:0, dz:-1}},
-  {t:12000, cap:'Envelope reach 160 → 300 mm — one dimension at a time',
-   to:{ed:300}},
-  {t:11000, cap:'Envelope height 200 → 320 mm', to:{eh:320}},
-  {t:10000, cap:'Envelope width 60 → 75 mm', to:{ew:75}},
-  {t:10000, cap:'Aluminium → steel: the same duty needs less section',
-   to:{mat:'Steel1018'}},
-  {t:12000, cap:'Back to the start', to:{N:400, fy:0.85, fz:0.85, ed:160, eh:200,
-                                         ew:60, mat:'Al6061'}},
+  {cap:'Back to a shelf load', to:{dx:0, dy:0, dz:-1}, steps:3},
+  {cap:'Envelope reach 160 → 300 mm — one dimension at a time',
+   to:{ed:300}, steps:5},
+  {cap:'Envelope height 200 → 320 mm', to:{eh:320}},
+  {cap:'Envelope width 60 → 75 mm', to:{ew:75}, steps:3},
+  {cap:'Aluminium → steel: the same duty needs less section',
+   to:{mat:'Steel1018'}, steps:3},
+  {cap:'Back to the start', to:{N:400, fy:0.85, fz:0.85, ed:160, eh:200,
+                                ew:60, mat:'Al6061'}, steps:5},
 ];
-const TOUR_SEED = 11;          // pinned: the part changes with the requirement only
-const PER_ACT = 6;             // designs an act must land before it may advance
-let tourOn=false, tourAct=0, tourT0=0, tourFrom=null, lastGuideDraw=0,
-    holdFull=false, actDesigns=0, tourShown=0;
+const TOUR_SEED = 11;    // pinned: the part changes with the requirement only
+// 4 regenerations per act by default. Each step costs ~0.6 s tween + ~0.9 s
+// design/mesh + ~1.4 s FEA solve, so the loop lands near 2.5 min.
+const PER_ACT   = 4;
+const TWEEN_MS  = 620;   // guide travel between two holds
+let tourOn=false, tourRun=0, prevField='';
 const easeIO = x => x<0.5 ? 2*x*x : 1-Math.pow(-2*x+2,2)/2;
 const snapshotState = () => ({N:+$('ln').value, ew:+$('ew').value, ed:+$('ed').value,
   eh:+$('eh').value, fy:loadFrac.y, fz:loadFrac.z,
@@ -564,24 +603,17 @@ window.toggleTour=()=>{
   $('btnTour').classList.toggle('on',tourOn);
   $('btnTour').textContent = tourOn ? 'tour ■' : 'tour ▶';
   $('caption').style.display = tourOn ? 'block' : 'none';
-  controls.autoRotate = tourOn; controls.autoRotateSpeed = 0.45;
-  if(tourOn){ tourAct=0; tourT0=performance.now(); tourFrom=snapshotState();
-    holdFull=false; actDesigns=0; tourShown=0; tourWorker(); }
-  else { if(inflight) inflight.abort(); say('tour stopped'); }
+  controls.autoRotate = tourOn; controls.autoRotateSpeed = 0.4;
+  if(tourOn) tourWorker(++tourRun);
+  else{
+    tourRun++;                          // invalidates the running loop
+    if(inflight) inflight.abort();
+    say('tour stopped');
+  }
 };
 
-// guides, every frame (throttled to ~25 fps; drawGuides rebuilds its geometry,
-// so there is no point running it at display rate)
-function tourStep(now){
-  const act=ACTS[tourAct % ACTS.length];
-  // paced by the slower of the wall clock and the regeneration rate, then
-  // smoothed so the guides glide between design completions instead of
-  // stepping when the backend is the limiting factor
-  const raw=Math.min(1,(now-tourT0)/act.t, actDesigns/PER_ACT);
-  tourShown += (raw-tourShown)*0.06;
-  const k=easeIO(tourShown);
-  const from=Object.assign({}, tourFrom, act.from||{});
-  const to=act.to, lerp=(a,b)=>a+(b-a)*k;
+function applyK(from,to,k){
+  const lerp=(a,b)=>a+(b-a)*k;
   if('N' in to)  $('ln').value = Math.round(lerp(from.N,to.N));
   if('ew' in to) $('ew').value = Math.round(lerp(from.ew,to.ew));
   if('ed' in to) $('ed').value = Math.round(lerp(from.ed,to.ed));
@@ -593,31 +625,41 @@ function tourStep(now){
             lerp(from.dy,'dy' in to?to.dy:from.dy),
             lerp(from.dz,'dz' in to?to.dz:from.dz)).normalize();
   }
-  if('mat' in to && raw>0.5) $('mat').value = to.mat;
-  $('caption').innerHTML =
-    `<b>${tourAct % ACTS.length + 1}/${ACTS.length}</b> &nbsp; ${act.cap}`;
-  if(now-lastGuideDraw > 40){ lastGuideDraw=now; drawGuides(); }
-  // wait for the smoothed value to arrive too, or the act would flip while the
-  // guides are still easing into their end pose
-  if(raw>=1 && tourShown>0.995){
-    tourAct++; tourT0=now; tourFrom=snapshotState();
-    actDesigns=0; tourShown=0; holdFull=true;
-  }
+  if('mat' in to && k>0.5) $('mat').value = to.mat;
+  drawGuides();
 }
-(function tourLoop(){ requestAnimationFrame(tourLoop);
-  if(tourOn) tourStep(performance.now()); })();
 
-// the part, regenerated as fast as the backend actually manages. Awaiting each
-// design means no aborted requests and no dropped frames of geometry; each
-// completion is also the tick that lets the guides advance.
-async function tourWorker(){
-  while(tourOn){
-    const full = holdFull; holdFull = false;
-    try{ await design({fast:!full, seed:TOUR_SEED}); }
-    catch(e){ /* keep the loop alive; design() reports its own errors */ }
-    if(!tourOn) break;
-    actDesigns++;
-    await new Promise(r=>setTimeout(r,120));   // yield to the renderer
+// animate the guides from k0 to k1 and RESOLVE — the caller then holds this
+// pose for as long as the regeneration takes
+function tweenGuides(from,to,k0,k1,run){
+  return new Promise(res=>{
+    const t0=performance.now();
+    (function frame(now){
+      if(run!==tourRun) return res();
+      const u=Math.min(1,(now-t0)/TWEEN_MS);
+      applyK(from,to,k0+(k1-k0)*easeIO(u));
+      u<1 ? requestAnimationFrame(frame) : res();
+    })(t0);
+  });
+}
+
+async function tourWorker(run){
+  let from=snapshotState();
+  for(let a=0; run===tourRun; a++){
+    const act=ACTS[a % ACTS.length];
+    const n=act.steps||PER_ACT;
+    const start=Object.assign({}, from, act.from||{});
+    if(act.from) applyK(start,act.from,1);      // jump to the act's own opening
+    $('caption').innerHTML=`<b>${a % ACTS.length + 1}/${ACTS.length}</b> &nbsp; ${act.cap}`;
+    for(let i=1; i<=n && run===tourRun; i++){
+      await tweenGuides(start, act.to, (i-1)/n, i/n, run);
+      if(run!==tourRun) break;
+      try{
+        await design({fast:true, seed:TOUR_SEED});
+        if(run===tourRun) await feaPaint(true);   // solver truth, not surrogate
+      }catch(e){ /* keep the loop alive; design/paint report their own errors */ }
+    }
+    from=snapshotState();
   }
 }
 

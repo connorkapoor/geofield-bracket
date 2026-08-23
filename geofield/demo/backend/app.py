@@ -247,6 +247,10 @@ class Engine:
             self.latents[lid]["mm"] = {
                 "field_mm": f_mm, "tokens_mm": toks_c, "meta": meta,
                 "unit_mm": u, "material": mat.params.get("name", "Al6061"),
+                # the normalizing map, kept so a point in the display frame can
+                # be pushed back to mm: f_norm(y) = (1/u) f_mm(u R^T (y - off)),
+                # hence x_mm = u * ((x_norm - off) @ R)
+                "R": R.clone(), "offset": offset.clone(),
                 "case": {"pos_mm": torch.tensor([0.0, arm_mm, 0.0]),
                          "dir": dirv.clone(),
                          "grip_mm": max(6.0, 0.12 * float(env_mm[0])),
@@ -488,6 +492,16 @@ class VerifyReq(BaseModel):
     thresholds: dict = {}
 
 
+class FeaPaintReq(BaseModel):
+    latent_id: str
+    points: list[list[float]]     # display (normalized) frame
+    # Step inward before sampling, display units. 0.01 is about two voxels:
+    # enough to put every vertex inside the mask, small enough that the sample
+    # is still the surface stress (measured p98 90.8 MPa vs 92.0 raw; at 0.035
+    # it drops to 57 MPa because the samples reach the neutral axis).
+    inset: float = 0.01
+
+
 class ExportReq(BaseModel):
     latent_id: str
     resolution: int = 192
@@ -705,6 +719,59 @@ def query(req: QueryReq):
         v = torch.cat(vals)
     return {"dims": [res, res, res], "lo": -1.05, "hi": 1.05,
             "values_b64": base64.b64encode(v.numpy().tobytes()).decode()}
+
+
+@app.post("/fea_paint")
+def fea_paint(req: FeaPaintReq):
+    """SOLVER-TRUTH stress at arbitrary display-frame points.
+
+    /query_points paints the surrogate's *prediction*; this paints the real
+    immersed-voxel FEA solution at true millimetre scale, sampled at whatever
+    points are handed in (normally the mesh vertices). It costs one full solve
+    -- about 1.7 s on an unloaded machine -- which is affordable interactively
+    because the solve is done once at 1 N and scaled analytically.
+
+    Use this when the surrogate's stress head is not trustworthy: it is the
+    same code path that labelled the dataset and that /verify reports.
+    """
+    entry = ENGINE.get(req.latent_id)
+    mm = entry.get("mm")
+    if mm is None:
+        raise HTTPException(503, "FEA paint needs a designed candidate "
+                                 "(it carries the mm-frame geometry)")
+    from ...labels.physics import LBracketFEA
+
+    x_n = torch.tensor(req.points, dtype=torch.float32)
+    # Mesh vertices sit ON the surface, so trilinear sampling of a
+    # cell-centred voxel field puts about half of them outside the mask and
+    # they would paint as holes. Step each one a couple of voxels along the
+    # inward normal first -- the field is a UGF, so -grad is exactly that and
+    # f(x) is exactly the distance to travel.
+    fobj = entry.get("field_obj")
+    if fobj is not None and req.inset > 0:
+        n = fobj.grad(x_n)
+        n = n / n.norm(dim=-1, keepdim=True).clamp_min(1e-9)
+        x_n = x_n - n * (fobj(x_n).unsqueeze(-1) + req.inset)
+    # display frame -> millimetres (see the note where "R"/"offset" are stored)
+    x_mm = mm["unit_mm"] * ((x_n - mm["offset"]) @ mm["R"])
+    solver = LBracketFEA(mm["field_mm"],
+                         [t for t in mm["tokens_mm"] if t.type == "fixed_point"],
+                         mm["meta"], mm["material"], device="cpu")
+    out, _ = solver.solve_case(mm["case"], x_mm, force_n=mm["force_n"])
+    vm = out.von_mises
+    inside = out.mask.bool()
+    yield_pa = MATERIALS[mm["material"]]["yield"]
+    ins = vm[inside]
+    return {"values": vm.tolist(),
+            "inside": inside.tolist(),
+            "peak_vm": out.peak_vm,
+            "utilisation_of_yield": out.peak_vm / max(yield_pa, 1e-9),
+            "max_disp_mm": out.max_disp * 1e3,
+            "residual": out.residual,
+            "stats": {"p2": float(torch.quantile(ins, 0.02)) if ins.numel() else 0.0,
+                      "p50": float(torch.quantile(ins, 0.50)) if ins.numel() else 0.0,
+                      "p98": float(torch.quantile(ins, 0.98)) if ins.numel() else 0.0},
+            "source": "fea"}
 
 
 @app.post("/verify")
